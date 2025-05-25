@@ -4,7 +4,11 @@ import { io } from 'socket.io-client';
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:4000`;
 
-const socket = io(SERVER_URL);
+const socket = io(SERVER_URL, {
+  transports: ['polling', 'websocket'],
+  upgrade: true,
+  rememberUpgrade: true
+});
 
 // Store latest ticket in a ref to avoid closure staleness
 let latestTicket = null;

@@ -18,11 +18,21 @@ primary_region = 'iad'
 
   [[services.ports]]
     port = 80
-    handlers = ['http', 'tls']
+    handlers = ['http']
 
   [[services.ports]]
     port = 443
     handlers = ['http', 'tls']
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "1s"
 
 [[vm]]
   memory = '1gb'

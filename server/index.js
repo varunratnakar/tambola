@@ -13,8 +13,16 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: [
+      'http://localhost:3000',
+      'https://*.netlify.app',
+      'https://*.netlify.com'
+    ],
+    methods: ['GET', 'POST'],
+    credentials: true
   },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 const PORT = process.env.PORT || 4000;
