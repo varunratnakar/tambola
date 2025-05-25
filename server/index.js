@@ -13,11 +13,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      'http://localhost:3000',
-      'https://*.netlify.app',
-      'https://*.netlify.com'
-    ],
+    origin: true,
     methods: ['GET', 'POST'],
     credentials: true
   },
