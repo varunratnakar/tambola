@@ -7,96 +7,143 @@
 @layer base {
   body {
     font-family: 'Comic Neue', cursive;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
+    @apply bg-gradient-to-br from-purple-200 to-pink-200 min-h-screen;
   }
 }
 
 @layer components {
-  .fun-button {
-    @apply bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
+  /* Fancy buttons */
+  .btn-primary {
+    @apply bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3 px-6 rounded-full shadow-lg active:scale-95 transition;
+  }
+  .btn-secondary {
+    @apply bg-gradient-to-r from-green-500 to-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg active:scale-95 transition;
+  }
+  .btn-danger {
+    @apply bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold py-3 px-6 rounded-full shadow-lg active:scale-95 transition;
+  }
+
+  /* Advanced ticket sizing */
+  .ticket-container {
+    /* Calculate maximum available space */
+    --footer-height: 60px;
+    --header-space: 80px; /* Reduced space since no banner */
+    --button-space-portrait: 180px; /* Space for claim buttons in portrait */
+    --button-width-landscape: 128px; /* Width of each side button panel */
+    --padding: 32px; /* Container padding */
+    --safety-margin: 20px; /* Extra safety margin */
+    
+    /* Available space calculations */
+    --available-height-portrait: calc(100vh - var(--footer-height) - var(--header-space) - var(--button-space-portrait) - var(--padding) - var(--safety-margin));
+    --available-width-portrait: calc(100vw - var(--padding) - var(--safety-margin));
+    --available-height-landscape: calc(100vh - var(--footer-height) - var(--header-space) - var(--padding) - var(--safety-margin));
+    --available-width-landscape: calc(100vw - (var(--button-width-landscape) * 2) - var(--padding) - 64px - var(--safety-margin)); /* 64px for gaps on both sides */
+    
+    /* Ticket dimensions (3:9 aspect ratio) */
+    --ticket-aspect-ratio: 0.333; /* height/width = 3/9 */
+    
+    /* Calculate optimal size based on constraints */
+    --max-width-by-height-portrait: calc(var(--available-height-portrait) / var(--ticket-aspect-ratio));
+    --max-width-by-width-portrait: var(--available-width-portrait);
+    --optimal-width-portrait: min(var(--max-width-by-height-portrait), var(--max-width-by-width-portrait), 600px);
+    
+    --max-width-by-height-landscape: calc(var(--available-height-landscape) / var(--ticket-aspect-ratio));
+    --max-width-by-width-landscape: var(--available-width-landscape);
+    --optimal-width-landscape: min(var(--max-width-by-height-landscape), var(--max-width-by-width-landscape), 500px);
+    
+    /* Calculate ticket height for button sizing */
+    --ticket-height-portrait: calc(var(--optimal-width-portrait) * var(--ticket-aspect-ratio));
+    --ticket-height-landscape: calc(var(--optimal-width-landscape) * var(--ticket-aspect-ratio));
+  }
+
+  /* Responsive claim buttons */
+  .claim-buttons-portrait {
+    /* Scale button size with ticket width - much bigger buttons */
+    --button-height: clamp(48px, calc(var(--optimal-width-portrait) * 0.12), 64px);
+    --button-font-size: clamp(0.875rem, calc(var(--optimal-width-portrait) * 0.03), 1.25rem);
+  }
+
+  .claim-buttons-landscape-left {
+    /* Left side buttons (lines) - 3 buttons - much bigger */
+    --available-button-height: var(--ticket-height-landscape);
+    --button-height: calc(var(--available-button-height) / 3 - 12px); /* 3 buttons with gaps */
+    --button-font-size: clamp(0.875rem, calc(var(--optimal-width-landscape) * 0.03), 1.25rem);
+    --button-width: clamp(140px, calc(var(--optimal-width-landscape) * 0.35), 180px);
+  }
+
+  .claim-buttons-landscape-right {
+    /* Right side buttons (corners + house) - 2 buttons - much bigger */
+    --available-button-height: var(--ticket-height-landscape);
+    --button-height: calc(var(--available-button-height) / 2 - 12px); /* 2 buttons with gaps */
+    --button-font-size: clamp(0.875rem, calc(var(--optimal-width-landscape) * 0.03), 1.25rem);
+    --button-width: clamp(140px, calc(var(--optimal-width-landscape) * 0.35), 180px);
+  }
+
+  /* Number / ticket cells */
+  .cell {
+    @apply flex items-center justify-center font-bold border rounded-md select-none;
+    width: 7vw; height: 7vw; font-size: 3.5vw; /* phones portrait */
+  }
+  @screen sm {
+    .cell { width: 40px; height: 40px; font-size: 0.9rem; }
+  }
+  /* Landscape mode adjustments for cells */
+  @media (orientation: landscape) and (max-width: 768px) {
+    .cell { width: 5vh; height: 5vh; font-size: 2.5vh; }
   }
   
-  .fun-button-green {
-    @apply bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
+  .cell-number   { @apply bg-yellow-300 text-purple-900 border-yellow-500; }
+  .cell-called   { @apply bg-purple-600 text-white border-purple-700; }
+  .cell-ticket   { @apply bg-blue-100 text-purple-800 border-blue-300; }
+  .cell-marked   { @apply bg-green-500 text-white border-green-700; }
+
+  /* Animations */
+  .bounce-in { animation: bounceIn 0.6s ease-out; }
+  .animate-fade-out { animation: fadeOut 1s ease-out; }
+}
+
+/* Custom landscape utilities */
+@media (orientation: landscape) {
+  .landscape\:flex { display: flex !important; }
+  .landscape\:hidden { display: none !important; }
+  .landscape\:gap-4 { gap: 1rem !important; }
+  .landscape\:items-start { align-items: flex-start !important; }
+  .landscape\:p-2 { padding: 0.5rem !important; }
+  .landscape\:max-w-xs { max-width: 20rem !important; }
+  .landscape\:max-w-sm { max-width: 24rem !important; }
+  .landscape\:text-sm { font-size: 0.875rem !important; line-height: 1.25rem !important; }
+  .landscape\:mb-1 { margin-bottom: 0.25rem !important; }
+  .landscape\:space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem !important; }
+  
+  /* Landscape ticket sizing */
+  .ticket-container > div {
+    width: var(--optimal-width-landscape) !important;
+    max-width: calc(100vw - 300px) !important; /* Account for both button panels */
   }
   
-  .fun-button-orange {
-    @apply bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
-  }
-  
-  .fun-card {
-    @apply bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-6 border-4 border-yellow-300;
-  }
-  
-  .number-cell {
-    @apply w-12 h-12 flex items-center justify-center rounded-xl font-bold text-lg transition-all duration-300 transform hover:scale-110 cursor-pointer shadow-md;
-  }
-  
-  .number-cell-available {
-    @apply bg-gradient-to-br from-yellow-300 to-orange-400 text-purple-800 hover:from-yellow-400 hover:to-orange-500;
-  }
-  
-  .number-cell-called {
-    @apply bg-gradient-to-br from-purple-500 to-pink-500 text-white;
-  }
-  
-  .ticket-cell {
-    @apply w-12 h-12 flex items-center justify-center rounded-lg font-bold text-lg transition-all duration-300 transform hover:scale-105 cursor-pointer border-2;
-  }
-  
-  .ticket-cell-unmarked {
-    @apply bg-gradient-to-br from-blue-100 to-purple-100 border-blue-300 text-purple-800 hover:from-blue-200 hover:to-purple-200;
-  }
-  
-  .ticket-cell-marked {
-    @apply bg-gradient-to-br from-green-400 to-emerald-500 border-green-600 text-white shadow-lg;
-  }
-  
-  .bounce-in {
-    animation: bounceIn 0.6s ease-out;
-  }
-  
-  .pulse-glow {
-    animation: pulseGlow 2s infinite;
-  }
-  
-  .wiggle {
-    animation: wiggle 0.5s ease-in-out;
+  /* Landscape button alignment */
+  .claim-buttons-landscape-left,
+  .claim-buttons-landscape-right {
+    align-self: flex-start !important;
+    margin-top: 0 !important;
   }
 }
 
 @keyframes bounceIn {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes pulseGlow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+@keyframes latestNumberFade {
+  0% { 
+    opacity: 1; 
   }
-  50% {
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+  70% { 
+    opacity: 1; 
   }
-}
-
-@keyframes wiggle {
-  0%, 7%, 14%, 21%, 28%, 35%, 42%, 49%, 56%, 63%, 70%, 77%, 84%, 91%, 98%, 100% {
-    transform: rotate(0deg);
-  }
-  3.5%, 10.5%, 17.5%, 24.5%, 31.5%, 38.5%, 45.5%, 52.5%, 59.5%, 66.5%, 73.5%, 80.5%, 87.5%, 94.5% {
-    transform: rotate(2deg);
+  100% { 
+    opacity: 0; 
   }
 } 

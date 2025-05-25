@@ -3,31 +3,29 @@ import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 
 function App() {
-  const [phase, setPhase] = useState('lobby'); // lobby or game
+  const [phase, setPhase] = useState('lobby');
   const [gameData, setGameData] = useState(null);
 
-  const handleStartGame = (data) => {
+  const startGame = (data) => {
     setGameData(data);
     setPhase('game');
   };
 
+  const goToLobby = () => {
+    setPhase('lobby');
+    setGameData(null);
+  };
+
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-6xl font-bold text-white mb-4 bounce-in" style={{ fontFamily: 'Fredoka One' }}>
-            🎉 Tambola Fun! 🎊
-          </h1>
-          <p className="text-xl text-yellow-200 font-bold">
-            The most exciting number game for kids! 🌟
-          </p>
-        </div>
-        
-        <div className="fun-card">
-          {phase === 'lobby' && <Lobby onStart={handleStartGame} />}
-          {phase === 'game' && <GameBoard {...gameData} />}
-        </div>
-      </div>
+    <div className="flex flex-col min-h-screen bg-purple-50">
+      <header className="bg-gradient-to-r from-purple-700 to-pink-700 text-white py-3 text-center shadow-md">
+        <h1 className="text-2xl font-extrabold tracking-wide" style={{ fontFamily: 'Fredoka One' }}>
+          🎉 Tambola Fun! 🎊
+        </h1>
+      </header>
+      <main className="flex-1">
+        {phase === 'lobby' ? <Lobby onStart={startGame} /> : <GameBoard {...gameData} onBackToLobby={goToLobby} />}
+      </main>
     </div>
   );
 }

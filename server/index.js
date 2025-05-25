@@ -44,7 +44,17 @@ io.on('connection', (socket) => {
     try {
       const { ticket, players } = gameManager.joinGame(gameId, socket.id, playerName);
       socket.join(gameId);
-      io.to(gameId).emit('player_joined', { playerName });
+      
+      // Get the game to notify all players
+      const game = gameManager.getGame(gameId);
+      if (game) {
+        // Notify each player with their personalized player list
+        Object.keys(game.players).forEach(playerId => {
+          const playerList = gameManager.getPlayersForUser(gameId, playerId);
+          io.to(playerId).emit('players_updated', { players: playerList });
+        });
+      }
+      
       cb({ status: 'ok', ticket, players });
     } catch (err) {
       cb({ status: 'error', message: err.message });
@@ -55,6 +65,16 @@ io.on('connection', (socket) => {
     try {
       gameManager.startGame(gameId, socket.id);
       io.to(gameId).emit('game_started', { gameId });
+      cb({ status: 'ok' });
+    } catch (err) {
+      cb({ status: 'error', message: err.message });
+    }
+  });
+
+  socket.on('cancel_game', ({ gameId }, cb) => {
+    try {
+      gameManager.cancelGame(gameId, socket.id);
+      io.to(gameId).emit('game_cancelled', { reason: 'Host cancelled the game' });
       cb({ status: 'ok' });
     } catch (err) {
       cb({ status: 'error', message: err.message });
@@ -72,11 +92,26 @@ io.on('connection', (socket) => {
   });
 
   socket.on('claim', ({ gameId, claimType, lines }, cb) => {
-    // claimType: 'line' or 'house'
+    // claimType: 'line', 'corners', or 'house'
     try {
       const result = gameManager.validateClaim(gameId, socket.id, claimType, lines);
       if (result.valid) {
-        io.to(gameId).emit('claim_success', { playerId: socket.id, claimType });
+        let prizeMessage = '';
+        if (claimType === 'line') {
+          const lineNames = { topLine: 'Top Line', middleLine: 'Middle Line', bottomLine: 'Bottom Line' };
+          prizeMessage = lineNames[result.lineType];
+        } else if (claimType === 'corners') {
+          prizeMessage = 'Corners';
+        } else if (claimType === 'house') {
+          prizeMessage = 'Full House';
+        }
+        
+        io.to(gameId).emit('claim_success', { 
+          playerId: socket.id, 
+          playerName: result.playerName,
+          claimType,
+          prizeMessage 
+        });
       } else {
         socket.emit('claim_failed', { reason: result.reason });
       }

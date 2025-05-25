@@ -18,7 +18,10 @@ class GameManager {
       remainingNumbers: Array.from({ length: 90 }, (_, i) => i + 1),
       started: false,
       winners: {
-        line: null,
+        topLine: null,
+        middleLine: null,
+        bottomLine: null,
+        corners: null,
         house: null,
       },
     };
@@ -32,7 +35,8 @@ class GameManager {
 
     this.games.set(gameId, game);
     this.playerGameMap.set(hostSocketId, gameId);
-    return { gameId, ticket, players: [game.players[hostSocketId].name] };
+    // Return empty players list for host (they don't see themselves)
+    return { gameId, ticket, players: [] };
   }
 
   joinGame(gameId, socketId, playerName) {
@@ -47,7 +51,10 @@ class GameManager {
       status: {},
     };
     this.playerGameMap.set(socketId, gameId);
-    const players = Object.values(game.players).map(p => p.name);
+    // Return only non-host players (exclude host and current player)
+    const players = Object.entries(game.players)
+      .filter(([socketId, player]) => socketId !== game.host && player.name !== playerName)
+      .map(([_, player]) => player.name);
     return { ticket, players };
   }
 
@@ -56,6 +63,19 @@ class GameManager {
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
+  }
+
+  cancelGame(gameId, socketId) {
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    if (!game) throw new Error('Invalid game ID');
+    if (socketId !== game.host) throw new Error('Only host can cancel the game');
+    
+    // Clean up the game immediately
+    this.games.delete(gameId);
+    // Remove all players from the game mapping
+    Object.keys(game.players).forEach(playerId => {
+      this.playerGameMap.delete(playerId);
+    });
   }
 
   drawNumber(gameId, socketId, chosenNumber = null) {
@@ -78,7 +98,34 @@ class GameManager {
       number = game.remainingNumbers.splice(idx, 1)[0];
     }
     game.drawnNumbers.push(number);
+    
+    // Check if game is complete (all numbers drawn)
+    if (game.remainingNumbers.length === 0) {
+      this.endGame(gameId, 'All numbers have been drawn!');
+    }
+    
     return number;
+  }
+
+  endGame(gameId, reason = 'Game ended') {
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    if (!game) return;
+    
+    // Notify all players that the game has ended
+    this.io.to(gameId).emit('game_completed', { 
+      reason,
+      winners: game.winners,
+      totalNumbers: game.drawnNumbers.length
+    });
+    
+    // Clean up the game after a short delay to allow players to see the message
+    setTimeout(() => {
+      this.games.delete(gameId);
+      // Remove all players from the game mapping
+      Object.keys(game.players).forEach(socketId => {
+        this.playerGameMap.delete(socketId);
+      });
+    }, 5000); // 5 second delay
   }
 
   validateClaim(gameId, socketId, claimType, lines) {
@@ -90,20 +137,39 @@ class GameManager {
     // Basic validation: all claimed numbers should be in drawnNumbers
     const { ticket } = player;
     const flatTicketNumbers = ticket.flat().filter(Boolean);
-    const claimedNumbers = flatTicketNumbers.filter((n) => game.drawnNumbers.includes(n));
 
     if (claimType === 'line') {
-      if (game.winners.line) {
-        return { valid: false, reason: 'Line already claimed' };
-      }
       const lineIndex = lines?.[0] ?? 0;
+      const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+      const lineType = lineTypes[lineIndex];
+      
+      if (game.winners[lineType]) {
+        return { valid: false, reason: `${lineType.replace('Line', ' Line')} already claimed` };
+      }
+      
       const lineNumbers = ticket[lineIndex].filter(Boolean);
       const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
       if (allCalled) {
-        game.winners.line = player.name;
-        return { valid: true };
+        game.winners[lineType] = player.name;
+        return { valid: true, lineType, playerName: player.name };
       }
       return { valid: false, reason: 'Not all numbers called' };
+    } else if (claimType === 'corners') {
+      if (game.winners.corners) {
+        return { valid: false, reason: 'Corners already claimed' };
+      }
+      
+      // Corner positions: [0,0], [0,8], [2,0], [2,8]
+      const cornerNumbers = [
+        ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
+      ].filter(Boolean);
+      
+      const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
+      if (allCalled) {
+        game.winners.corners = player.name;
+        return { valid: true, playerName: player.name };
+      }
+      return { valid: false, reason: 'Not all corner numbers called' };
     } else if (claimType === 'house') {
       if (game.winners.house) {
         return { valid: false, reason: 'House already claimed' };
@@ -111,7 +177,7 @@ class GameManager {
       const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
       if (allCalled) {
         game.winners.house = player.name;
-        return { valid: true };
+        return { valid: true, playerName: player.name };
       }
       return { valid: false, reason: 'Not all numbers called' };
     }
@@ -132,6 +198,23 @@ class GameManager {
       this.games.delete(gameId);
       this.io.to(gameId).emit('game_ended');
     }
+  }
+
+  getGame(gameId) {
+    return this.games.get(gameId?.toLowerCase?.() || gameId);
+  }
+
+  getPlayersForUser(gameId, socketId) {
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    if (!game) return [];
+    
+    const currentPlayer = game.players[socketId];
+    if (!currentPlayer) return [];
+    
+    // Return all players except host and current user
+    return Object.entries(game.players)
+      .filter(([id, player]) => id !== game.host && player.name !== currentPlayer.name)
+      .map(([_, player]) => player.name);
   }
 }
 
