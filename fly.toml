@@ -7,8 +7,7 @@ app = 'tambola-server'
 primary_region = 'iad'
 
 [build]
-  context = 'server'
-  dockerfile = 'Dockerfile'
+  dockerfile = 'server/Dockerfile'
 
 [env]
   PORT = '4000'
