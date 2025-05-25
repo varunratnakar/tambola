@@ -1,0 +1,17 @@
+version: '3'
+services:
+  server:
+    build: ./server
+    ports:
+      - '4000:4000'
+    restart: unless-stopped
+  client:
+    build:
+      context: ./client
+      args:
+        - VITE_SERVER_URL=http://localhost:4000
+    ports:
+      - '80:80'
+    depends_on:
+      - server
+    restart: unless-stopped 

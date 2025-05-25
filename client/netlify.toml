@@ -1,0 +1,14 @@
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Replace with the public URL of your Socket.IO server
+  VITE_SERVER_URL = "https://tambola-server.fly.dev"
+
+[redirects]
+  # Support SPA routing
+  [[redirects]]
+    from = "/*"
+    to = "/index.html"
+    status = 200 

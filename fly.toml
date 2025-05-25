@@ -1,0 +1,31 @@
+# fly.toml app configuration file generated for tambola-server on 2025-05-25T17:48:25+04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'tambola-server'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'server/Dockerfile'
+  context = 'server'
+
+[env]
+  PORT = '4000'
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 4000
+
+  [[services.ports]]
+    port = 80
+    handlers = ['http', 'tls']
+
+  [[services.ports]]
+    port = 443
+    handlers = ['http', 'tls']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
