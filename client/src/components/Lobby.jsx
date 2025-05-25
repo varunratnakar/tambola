@@ -55,7 +55,8 @@ function Lobby({ onStart }) {
     });
 
     socket.on('game_started', () => {
-      onStart({ socket, ticket, gameId, isHost });
+      const joinedTicket = latestTicket || ticket;
+      onStart({ socket, ticket: joinedTicket, gameId, isHost });
     });
 
     return () => {

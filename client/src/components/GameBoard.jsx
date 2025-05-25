@@ -193,7 +193,11 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
         </div>
       </div>
 
-      {!isHost && (
+      {!isHost && !ticket && (
+        <p className="text-center text-purple-600 font-bold">Loading your ticket...</p>
+      )}
+
+      {!isHost && ticket && (
         <>
           <TicketGrid
             ticket={ticket}
