@@ -68,31 +68,35 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
   const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => {
-    socket.on('number_drawn', ({ number }) => {
+    const onNumberDrawn = ({ number }) => {
       setDrawnNumbers((prev) => [...prev, number]);
       setLastNumber(number);
-      // Trigger celebration animation
       setShowCelebration(true);
       setTimeout(() => setShowCelebration(false), 1000);
-    });
+    };
 
-    socket.on('claim_success', ({ playerId, claimType }) => {
+    const onClaimSuccess = ({ playerId, claimType }) => {
       alert(`🎉 Amazing! Someone won ${claimType}! 🎉`);
-    });
+    };
 
-    socket.on('claim_failed', ({ reason }) => {
+    const onClaimFailed = ({ reason }) => {
       alert(`😅 Oops! ${reason} - Keep trying! 💪`);
-    });
+    };
 
-    socket.on('game_ended', () => {
+    const onGameEnded = () => {
       alert('🎮 Game Over! Thanks for playing! 🌟');
-    });
+    };
+
+    socket.on('number_drawn', onNumberDrawn);
+    socket.on('claim_success', onClaimSuccess);
+    socket.on('claim_failed', onClaimFailed);
+    socket.on('game_ended', onGameEnded);
 
     return () => {
-      socket.off('number_drawn');
-      socket.off('claim_success');
-      socket.off('claim_failed');
-      socket.off('game_ended');
+      socket.off('number_drawn', onNumberDrawn);
+      socket.off('claim_success', onClaimSuccess);
+      socket.off('claim_failed', onClaimFailed);
+      socket.off('game_ended', onGameEnded);
     };
   }, [socket]);
 
@@ -135,8 +139,10 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h2 className="text-4xl font-bold text-white mb-2" style={{ fontFamily: 'Fredoka One' }}>
-          🎮 Game Code: {gameId} 🎮
+        <h2 className="text-4xl font-extrabold text-yellow-300 mb-2 tracking-wider" style={{ fontFamily: 'Fredoka One' }}>
+          🎮 Game Code: <span className="bg-white text-orange-700 px-4 py-1 rounded-2xl border-4 border-orange-400 inline-block shadow-md">
+            {gameId || '---'}
+          </span> 🎮
         </h2>
         {isHost && (
           <p className="text-yellow-200 font-bold text-lg">

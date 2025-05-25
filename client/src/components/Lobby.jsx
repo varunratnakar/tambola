@@ -51,16 +51,23 @@ function Lobby({ onStart }) {
     });
 
     socket.on('player_joined', ({ playerName }) => {
-      setPlayers((prev) => [...prev, playerName]);
+      setPlayers((prev) => (prev.includes(playerName) ? prev : [...prev, playerName]));
     });
 
     socket.on('game_started', () => {
       const joinedTicket = latestTicket || ticket;
-      onStart({ socket, ticket: joinedTicket, gameId, isHost });
+      const gid = gameId || gameIdInput; // fallback for joiners
+      onStart({ socket, ticket: joinedTicket, gameId: gid, isHost });
     });
 
+    // Cleanup: remove listeners but keep socket open for GameBoard
     return () => {
-      socket.disconnect();
+      socket.off('player_joined');
+      socket.off('game_started');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
+      // Do NOT disconnect here; GameBoard will continue using this socket
     };
   }, []);
 
@@ -76,7 +83,7 @@ function Lobby({ onStart }) {
         latestTicket = res.ticket;
         setTicket(res.ticket);
         setIsHost(true);
-        setPlayers([name || 'Host']);
+        setPlayers(res.players || [name || 'Host']);
       } else {
         setError(res.message);
       }
@@ -96,6 +103,7 @@ function Lobby({ onStart }) {
         setTicket(res.ticket);
         setGameId(gameIdInput);
         setIsHost(false);
+        setPlayers(res.players || []);
       } else {
         setError(res.message);
       }
@@ -197,15 +205,27 @@ function Lobby({ onStart }) {
         )}
 
         <div className="text-center">
-          <button
-            className={`${mode === 'create' ? 'fun-button' : 'fun-button-green'} ${
-              connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            onClick={mode === 'create' ? handleCreate : handleJoin}
-            disabled={connectionStatus !== 'connected'}
-          >
-            {mode === 'create' ? '🎉 Create Amazing Game!' : '🚀 Join the Fun!'}
-          </button>
+          {connectionStatus === 'connected' && !gameId && (
+            <button
+              className={`${mode === 'create' ? 'fun-button' : 'fun-button-green'} `}
+              onClick={mode === 'create' ? handleCreate : handleJoin}
+            >
+              {mode === 'create' ? '🎉 Create Amazing Game!' : '🚀 Join the Fun!'}
+            </button>
+          )}
+          {gameId && (
+            <button
+              className="fun-button-orange mt-2"
+              onClick={() => {
+                // cancel current attempt
+                setGameId(null);
+                setTicket(null);
+                setPlayers([]);
+              }}
+            >
+              ❌ Cancel
+            </button>
+          )}
         </div>
 
         {gameId && (

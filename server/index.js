@@ -32,9 +32,9 @@ io.on('connection', (socket) => {
 
   socket.on('create_game', ({ hostName }, cb) => {
     try {
-      const { gameId, ticket } = gameManager.createGame(socket.id, hostName);
+      const { gameId, ticket, players } = gameManager.createGame(socket.id, hostName);
       socket.join(gameId);
-      cb({ status: 'ok', gameId, ticket });
+      cb({ status: 'ok', gameId, ticket, players });
     } catch (err) {
       cb({ status: 'error', message: err.message });
     }
@@ -42,10 +42,10 @@ io.on('connection', (socket) => {
 
   socket.on('join_game', ({ gameId, playerName }, cb) => {
     try {
-      const ticket = gameManager.joinGame(gameId, socket.id, playerName);
+      const { ticket, players } = gameManager.joinGame(gameId, socket.id, playerName);
       socket.join(gameId);
       io.to(gameId).emit('player_joined', { playerName });
-      cb({ status: 'ok', ticket });
+      cb({ status: 'ok', ticket, players });
     } catch (err) {
       cb({ status: 'error', message: err.message });
     }

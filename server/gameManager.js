@@ -32,7 +32,7 @@ class GameManager {
 
     this.games.set(gameId, game);
     this.playerGameMap.set(hostSocketId, gameId);
-    return { gameId, ticket };
+    return { gameId, ticket, players: [game.players[hostSocketId].name] };
   }
 
   joinGame(gameId, socketId, playerName) {
@@ -47,7 +47,8 @@ class GameManager {
       status: {},
     };
     this.playerGameMap.set(socketId, gameId);
-    return ticket;
+    const players = Object.values(game.players).map(p => p.name);
+    return { ticket, players };
   }
 
   startGame(gameId, socketId) {
