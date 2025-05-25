@@ -54,10 +54,10 @@ function Lobby({ onStart }) {
       setPlayers((prev) => (prev.includes(playerName) ? prev : [...prev, playerName]));
     });
 
-    socket.on('game_started', () => {
+    socket.on('game_started', ({ gameId: gidFromServer } = {}) => {
       const joinedTicket = latestTicket || ticket;
-      const gid = gameId || gameIdInput; // fallback for joiners
-      onStart({ socket, ticket: joinedTicket, gameId: gid, isHost });
+      const gid = gidFromServer || gameId || gameIdInput;
+      onStart({ socket: socketRef.current, ticket: joinedTicket, gameId: gid, isHost });
     });
 
     // Cleanup: remove listeners but keep socket open for GameBoard
@@ -96,12 +96,13 @@ function Lobby({ onStart }) {
       return;
     }
 
-    socketRef.current.emit('join_game', { gameId: gameIdInput, playerName: name }, (res) => {
+    const code = gameIdInput.trim().toLowerCase();
+    socketRef.current.emit('join_game', { gameId: code, playerName: name }, (res) => {
       if (res.status === 'ok') {
         // Save ticket but wait for 'game_started' broadcast before rendering GameBoard
         latestTicket = res.ticket;
         setTicket(res.ticket);
-        setGameId(gameIdInput);
+        setGameId(code);
         setIsHost(false);
         setPlayers(res.players || []);
       } else {

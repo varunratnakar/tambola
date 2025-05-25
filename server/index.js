@@ -54,7 +54,7 @@ io.on('connection', (socket) => {
   socket.on('start_game', ({ gameId }, cb) => {
     try {
       gameManager.startGame(gameId, socket.id);
-      io.to(gameId).emit('game_started');
+      io.to(gameId).emit('game_started', { gameId });
       cb({ status: 'ok' });
     } catch (err) {
       cb({ status: 'error', message: err.message });
