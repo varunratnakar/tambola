@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:4000`;
-
-const socket = io(SERVER_URL);
 
 // Store latest ticket in a ref to avoid closure staleness
 let latestTicket = null;
@@ -18,24 +16,59 @@ function Lobby({ onStart }) {
   const [isHost, setIsHost] = useState(false);
   const [players, setPlayers] = useState([]);
   const [error, setError] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const socketRef = useRef(null);
 
-  // Socket listeners
-  React.useEffect(() => {
+  // Initialize socket connection
+  useEffect(() => {
+    console.log('Connecting to server:', SERVER_URL);
+    
+    const socket = io(SERVER_URL, {
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      timeout: 20000,
+      forceNew: true
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      setConnectionStatus('connected');
+      setError(null);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      setConnectionStatus('disconnected');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setConnectionStatus('error');
+      setError('Failed to connect to server. Please try again.');
+    });
+
     socket.on('player_joined', ({ playerName }) => {
       setPlayers((prev) => [...prev, playerName]);
     });
+
     socket.on('game_started', () => {
       onStart({ socket, ticket, gameId, isHost });
     });
 
     return () => {
-      socket.off('player_joined');
-      socket.off('game_started');
+      socket.disconnect();
     };
-  }, [ticket, gameId, isHost, onStart]);
+  }, []);
 
   const handleCreate = () => {
-    socket.emit('create_game', { hostName: name }, (res) => {
+    if (!socketRef.current || connectionStatus !== 'connected') {
+      setError('Not connected to server. Please wait and try again.');
+      return;
+    }
+
+    socketRef.current.emit('create_game', { hostName: name }, (res) => {
       if (res.status === 'ok') {
         setGameId(res.gameId);
         latestTicket = res.ticket;
@@ -49,7 +82,12 @@ function Lobby({ onStart }) {
   };
 
   const handleJoin = () => {
-    socket.emit('join_game', { gameId: gameIdInput, playerName: name }, (res) => {
+    if (!socketRef.current || connectionStatus !== 'connected') {
+      setError('Not connected to server. Please wait and try again.');
+      return;
+    }
+
+    socketRef.current.emit('join_game', { gameId: gameIdInput, playerName: name }, (res) => {
       if (res.status === 'ok') {
         // Save ticket but wait for 'game_started' broadcast before rendering GameBoard
         latestTicket = res.ticket;
@@ -63,11 +101,16 @@ function Lobby({ onStart }) {
   };
 
   const handleStart = () => {
-    socket.emit('start_game', { gameId }, (res) => {
+    if (!socketRef.current || connectionStatus !== 'connected') {
+      setError('Not connected to server. Please wait and try again.');
+      return;
+    }
+
+    socketRef.current.emit('start_game', { gameId }, (res) => {
       if (res.status === 'ok') {
         // Immediately transition host to game view to avoid race
         const hostTicket = latestTicket || ticket;
-        onStart({ socket, ticket: hostTicket, gameId, isHost: true });
+        onStart({ socket: socketRef.current, ticket: hostTicket, gameId, isHost: true });
       } else {
         alert(res.message);
       }
@@ -81,6 +124,22 @@ function Lobby({ onStart }) {
           🎮 Let's Play Together! 🎮
         </h2>
         <p className="text-purple-600 font-semibold">Enter your name and start the fun!</p>
+        
+        {/* Connection Status */}
+        <div className="mt-2">
+          {connectionStatus === 'connecting' && (
+            <p className="text-yellow-600 font-bold animate-pulse">🔄 Connecting to server...</p>
+          )}
+          {connectionStatus === 'connected' && (
+            <p className="text-green-600 font-bold">✅ Connected to server!</p>
+          )}
+          {connectionStatus === 'disconnected' && (
+            <p className="text-red-600 font-bold">❌ Disconnected from server</p>
+          )}
+          {connectionStatus === 'error' && (
+            <p className="text-red-600 font-bold">⚠️ Connection error</p>
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -93,6 +152,7 @@ function Lobby({ onStart }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Enter your awesome name! ✨"
+            disabled={connectionStatus !== 'connected'}
           />
         </div>
 
@@ -103,6 +163,7 @@ function Lobby({ onStart }) {
               className="w-5 h-5 text-pink-500"
               checked={mode === 'create'}
               onChange={() => setMode('create')}
+              disabled={connectionStatus !== 'connected'}
             />
             <span className="text-lg font-bold text-purple-800">🌟 Create New Game</span>
           </label>
@@ -112,6 +173,7 @@ function Lobby({ onStart }) {
               className="w-5 h-5 text-pink-500"
               checked={mode === 'join'}
               onChange={() => setMode('join')}
+              disabled={connectionStatus !== 'connected'}
             />
             <span className="text-lg font-bold text-purple-800">🚀 Join Game</span>
           </label>
@@ -127,14 +189,18 @@ function Lobby({ onStart }) {
               value={gameIdInput}
               onChange={(e) => setGameIdInput(e.target.value)}
               placeholder="Enter the secret game code! 🔑"
+              disabled={connectionStatus !== 'connected'}
             />
           </div>
         )}
 
         <div className="text-center">
           <button
-            className={mode === 'create' ? 'fun-button' : 'fun-button-green'}
+            className={`${mode === 'create' ? 'fun-button' : 'fun-button-green'} ${
+              connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
             onClick={mode === 'create' ? handleCreate : handleJoin}
+            disabled={connectionStatus !== 'connected'}
           >
             {mode === 'create' ? '🎉 Create Amazing Game!' : '🚀 Join the Fun!'}
           </button>
