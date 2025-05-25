@@ -36,7 +36,7 @@ class GameManager {
   }
 
   joinGame(gameId, socketId, playerName) {
-    const game = this.games.get(gameId);
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (game.started) throw new Error('Game already started');
 
@@ -52,14 +52,14 @@ class GameManager {
   }
 
   startGame(gameId, socketId) {
-    const game = this.games.get(gameId);
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
   }
 
   drawNumber(gameId, socketId, chosenNumber = null) {
-    const game = this.games.get(gameId);
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can draw numbers');
     if (!game.started) throw new Error('Game not started');
@@ -82,7 +82,7 @@ class GameManager {
   }
 
   validateClaim(gameId, socketId, claimType, lines) {
-    const game = this.games.get(gameId);
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     const player = game.players[socketId];
     if (!player) throw new Error('Player not in game');

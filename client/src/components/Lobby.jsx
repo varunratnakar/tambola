@@ -96,7 +96,7 @@ function Lobby({ onStart }) {
       return;
     }
 
-    const code = gameIdInput.trim().toLowerCase();
+    const code = gameIdInput.trim();
     socketRef.current.emit('join_game', { gameId: code, playerName: name }, (res) => {
       if (res.status === 'ok') {
         // Save ticket but wait for 'game_started' broadcast before rendering GameBoard
