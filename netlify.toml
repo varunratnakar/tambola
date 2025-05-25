@@ -1,7 +1,7 @@
 # example netlify.toml
 [build]
   base = "client/"
-  publish = "client/dist/"
+  publish = "dist/"
   command = "npm run build"
 
 [build.environment]
