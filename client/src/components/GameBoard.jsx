@@ -3,42 +3,61 @@ import React, { useEffect, useState } from 'react';
 function NumberGrid({ drawnNumbers, onNumberClick }) {
   const numbers = Array.from({ length: 90 }, (_, i) => i + 1);
   return (
-    <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 mb-4 select-none">
-      {numbers.map((num) => (
-        <div
-          key={num}
-          onClick={() => onNumberClick && onNumberClick(num)}
-          className={`w-10 h-10 flex items-center justify-center rounded cursor-pointer text-sm sm:text-base ${drawnNumbers.includes(num) ? 'bg-blue-600 text-white cursor-default' : 'bg-gray-200 hover:bg-gray-300'}`}
-        >
-          {num}
-        </div>
-      ))}
+    <div className="space-y-4">
+      <h3 className="text-2xl font-bold text-purple-800 text-center" style={{ fontFamily: 'Fredoka One' }}>
+        🎯 Click a Number to Call! 🎯
+      </h3>
+      <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 p-4 bg-gradient-to-br from-purple-100 to-pink-100 rounded-3xl border-4 border-purple-300">
+        {numbers.map((num) => (
+          <div
+            key={num}
+            onClick={() => onNumberClick && onNumberClick(num)}
+            className={`number-cell ${
+              drawnNumbers.includes(num) ? 'number-cell-called' : 'number-cell-available'
+            } ${drawnNumbers.includes(num) ? '' : 'hover:wiggle'}`}
+          >
+            {num}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function TicketGrid({ ticket, markedNumbers, onCellClick }) {
   return (
-    <table className="mx-auto mt-4 border-collapse">
-      <tbody>
-        {ticket.map((row, rIdx) => (
-          <tr key={rIdx}>
-            {row.map((num, cIdx) => {
-              const isMarked = markedNumbers.includes(num);
-              return (
-                <td
-                  key={cIdx}
-                  onClick={() => num && onCellClick(num)}
-                  className={`w-10 h-10 border text-center text-sm sm:text-base ${num ? 'cursor-pointer' : ''} ${isMarked ? 'bg-green-600 text-white font-bold' : 'bg-white'}`}
-                >
-                  {num || ''}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-4">
+      <h3 className="text-2xl font-bold text-blue-800 text-center" style={{ fontFamily: 'Fredoka One' }}>
+        🎫 Your Magic Ticket! 🎫
+      </h3>
+      <div className="flex justify-center">
+        <div className="bg-gradient-to-br from-blue-100 to-green-100 p-6 rounded-3xl border-4 border-blue-300 shadow-2xl">
+          <table className="border-collapse">
+            <tbody>
+              {ticket.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((num, cIdx) => {
+                    const isMarked = markedNumbers.includes(num);
+                    return (
+                      <td key={cIdx} className="p-1">
+                        <div
+                          onClick={() => num && onCellClick(num)}
+                          className={`ticket-cell ${
+                            isMarked ? 'ticket-cell-marked bounce-in' : 'ticket-cell-unmarked'
+                          } ${num ? 'hover:wiggle' : ''}`}
+                        >
+                          {num || ''}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -46,23 +65,27 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
   const [drawnNumbers, setDrawnNumbers] = useState([]);
   const [lastNumber, setLastNumber] = useState(null);
   const [markedNumbers, setMarkedNumbers] = useState([]);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => {
     socket.on('number_drawn', ({ number }) => {
       setDrawnNumbers((prev) => [...prev, number]);
       setLastNumber(number);
+      // Trigger celebration animation
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 1000);
     });
 
     socket.on('claim_success', ({ playerId, claimType }) => {
-      alert(`Player ${playerId} won ${claimType}!`);
+      alert(`🎉 Amazing! Someone won ${claimType}! 🎉`);
     });
 
     socket.on('claim_failed', ({ reason }) => {
-      alert(`Claim failed: ${reason}`);
+      alert(`😅 Oops! ${reason} - Keep trying! 💪`);
     });
 
     socket.on('game_ended', () => {
-      alert('Game ended');
+      alert('🎮 Game Over! Thanks for playing! 🌟');
     });
 
     return () => {
@@ -76,7 +99,7 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
   const handleDrawRandom = () => {
     socket.emit('draw_number', { gameId }, (res) => {
       if (res.status !== 'ok') {
-        alert(res.message);
+        alert(`😅 Oops! ${res.message}`);
       }
     });
   };
@@ -85,7 +108,7 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
     if (drawnNumbers.includes(num)) return;
     socket.emit('draw_number', { gameId, number: num }, (res) => {
       if (res.status !== 'ok') {
-        alert(res.message);
+        alert(`😅 Oops! ${res.message}`);
       }
     });
   };
@@ -97,41 +120,78 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
   };
 
   const handleClaimLine = (lineIdx) => {
+    const lineNames = ['Top', 'Middle', 'Bottom'];
     socket.emit('claim', { gameId, claimType: 'line', lines: [lineIdx] }, (res) => {
-      if (!res.valid) {
-        alert(res.reason || 'Invalid claim');
-      }
+      // Alert is handled by socket event listener, no need for duplicate here
     });
   };
 
   const handleClaimHouse = () => {
     socket.emit('claim', { gameId, claimType: 'house' }, (res) => {
-      if (!res.valid) {
-        alert(res.reason || 'Invalid claim');
-      }
+      // Alert is handled by socket event listener, no need for duplicate here
     });
   };
 
   return (
-    <div>
-      <h2>Game ID: {gameId}</h2>
-      {!ticket ? (
-        <p>Loading ticket...</p>
-      ) : (
-        <>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-4xl font-bold text-white mb-2" style={{ fontFamily: 'Fredoka One' }}>
+          🎮 Game Code: {gameId} 🎮
+        </h2>
+        {isHost && (
+          <p className="text-yellow-200 font-bold text-lg">
+            🌟 You're the Game Master! 🌟
+          </p>
+        )}
+      </div>
+
       {isHost && (
-        <>
-          <button className="mb-2 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700" onClick={handleDrawRandom}>
-            Draw Random Number
-          </button>
+        <div className="space-y-4">
+          <div className="text-center">
+            <button className="fun-button-orange" onClick={handleDrawRandom}>
+              🎲 Draw Random Number! 🎲
+            </button>
+          </div>
           <NumberGrid
             drawnNumbers={drawnNumbers}
             onNumberClick={handleNumberGridClick}
           />
-        </>
+        </div>
       )}
-      {lastNumber && <h3 className="text-xl font-semibold mb-2">Last Number: {lastNumber}</h3>}
-      <p className="mb-2">Last Numbers:&nbsp;{drawnNumbers.slice(-3).join(', ')}</p>
+
+      {lastNumber && (
+        <div className={`text-center ${showCelebration ? 'bounce-in' : ''}`}>
+          <div className="bg-gradient-to-r from-yellow-300 to-orange-400 rounded-3xl p-6 border-4 border-yellow-500 shadow-2xl">
+            <h3 className="text-2xl font-bold text-orange-800 mb-2" style={{ fontFamily: 'Fredoka One' }}>
+              🎊 Latest Number Called! 🎊
+            </h3>
+            <div className="text-6xl font-bold text-orange-900 pulse-glow" style={{ fontFamily: 'Fredoka One' }}>
+              {lastNumber}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-gradient-to-r from-green-100 to-blue-100 rounded-3xl p-4 border-4 border-green-300">
+        <h4 className="text-lg font-bold text-green-800 text-center mb-2" style={{ fontFamily: 'Fredoka One' }}>
+          📋 Last 5 Numbers Called:
+        </h4>
+        <div className="flex flex-wrap justify-center gap-2">
+          {drawnNumbers.slice(-5).map((num, index) => (
+            <span
+              key={index}
+              className="bg-gradient-to-r from-green-400 to-blue-400 text-white px-3 py-1 rounded-full font-bold text-sm bounce-in"
+            >
+              {num}
+            </span>
+          ))}
+          {drawnNumbers.length > 5 && (
+            <span className="text-green-600 font-bold">
+              ... and {drawnNumbers.length - 5} more!
+            </span>
+          )}
+        </div>
+      </div>
 
       {!isHost && (
         <>
@@ -141,23 +201,31 @@ function GameBoard({ socket, ticket, gameId, isHost }) {
             onCellClick={handleTicketClick}
           />
 
-          <div className="mt-4 flex flex-wrap gap-2 justify-center">
-            <button className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700" onClick={() => handleClaimLine(0)}>
-              Claim Top Line
-            </button>
-            <button className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700" onClick={() => handleClaimLine(1)}>
-              Claim Middle Line
-            </button>
-            <button className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700" onClick={() => handleClaimLine(2)}>
-              Claim Bottom Line
-            </button>
-            <button className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700" onClick={handleClaimHouse}>
-              Claim Full House
-            </button>
+          <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-purple-800 text-center" style={{ fontFamily: 'Fredoka One' }}>
+              🏆 Ready to Win? 🏆
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <button className="fun-button text-sm py-2" onClick={() => handleClaimLine(0)}>
+                🔥 Top Line!
+              </button>
+              <button className="fun-button text-sm py-2" onClick={() => handleClaimLine(1)}>
+                ⭐ Middle Line!
+              </button>
+              <button className="fun-button text-sm py-2" onClick={() => handleClaimLine(2)}>
+                💫 Bottom Line!
+              </button>
+              <button className="fun-button-orange text-sm py-2" onClick={handleClaimHouse}>
+                🎉 FULL HOUSE! 🎉
+              </button>
+            </div>
+            <div className="text-center">
+              <p className="text-purple-600 font-bold text-sm">
+                💡 Tip: Click numbers on your ticket to mark them! 💡
+              </p>
+            </div>
           </div>
         </>
-      )}
-      </>
       )}
     </div>
   );

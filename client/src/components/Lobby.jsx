@@ -4,11 +4,7 @@ import { io } from 'socket.io-client';
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:4000`;
 
-const socket = io(SERVER_URL, {
-  transports: ['polling', 'websocket'],
-  upgrade: true,
-  rememberUpgrade: true
-});
+const socket = io(SERVER_URL);
 
 // Store latest ticket in a ref to avoid closure staleness
 let latestTicket = null;
@@ -79,74 +75,119 @@ function Lobby({ onStart }) {
   };
 
   return (
-    <div>
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">
-          Your Name:
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-purple-800 mb-2" style={{ fontFamily: 'Fredoka One' }}>
+          🎮 Let's Play Together! 🎮
+        </h2>
+        <p className="text-purple-600 font-semibold">Enter your name and start the fun!</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-purple-800 font-bold mb-2 text-lg">
+            👤 Your Super Cool Name:
+          </label>
           <input
-            className="mt-1 w-full border rounded px-2 py-1"
+            className="w-full border-4 border-purple-300 rounded-2xl px-4 py-3 text-lg font-bold text-purple-800 focus:border-pink-400 focus:outline-none transition-colors bg-gradient-to-r from-purple-50 to-pink-50"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your awesome name! ✨"
           />
-        </label>
-      </div>
+        </div>
 
-      <div className="flex items-center space-x-4 mb-4">
-        <input
-          type="radio"
-          className="mr-1"
-          checked={mode === 'create'}
-          onChange={() => setMode('create')}
-        />
-        Create Game
-        <input
-          type="radio"
-          className="mr-1"
-          checked={mode === 'join'}
-          onChange={() => setMode('join')}
-        />
-        Join Game
-      </div>
-
-      {mode === 'join' && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
-            Game ID:
+        <div className="flex items-center justify-center space-x-8">
+          <label className="flex items-center space-x-2 cursor-pointer">
             <input
-              className="mt-1 w-full border rounded px-2 py-1"
-              value={gameIdInput}
-              onChange={(e) => setGameIdInput(e.target.value)}
+              type="radio"
+              className="w-5 h-5 text-pink-500"
+              checked={mode === 'create'}
+              onChange={() => setMode('create')}
             />
+            <span className="text-lg font-bold text-purple-800">🌟 Create New Game</span>
+          </label>
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="radio"
+              className="w-5 h-5 text-pink-500"
+              checked={mode === 'join'}
+              onChange={() => setMode('join')}
+            />
+            <span className="text-lg font-bold text-purple-800">🚀 Join Game</span>
           </label>
         </div>
-      )}
 
-      <button
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        onClick={mode === 'create' ? handleCreate : handleJoin}
-      >
-        {mode === 'create' ? 'Create' : 'Join'}
-      </button>
+        {mode === 'join' && (
+          <div className="bounce-in">
+            <label className="block text-purple-800 font-bold mb-2 text-lg">
+              🎯 Game Code:
+            </label>
+            <input
+              className="w-full border-4 border-blue-300 rounded-2xl px-4 py-3 text-lg font-bold text-blue-800 focus:border-green-400 focus:outline-none transition-colors bg-gradient-to-r from-blue-50 to-green-50"
+              value={gameIdInput}
+              onChange={(e) => setGameIdInput(e.target.value)}
+              placeholder="Enter the secret game code! 🔑"
+            />
+          </div>
+        )}
 
-      {gameId && (
-        <div className="mt-4 bg-gray-100 p-4 rounded">
-          <p>
-            Game ID: <strong>{gameId}</strong>
-          </p>
-          <p>Share this ID with your friends to join.</p>
-          <p>Players: {players.join(', ')}</p>
-          {isHost && (
-            <button
-              className="mt-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-              onClick={handleStart}
-            >
-              Start Game
-            </button>
-          )}
+        <div className="text-center">
+          <button
+            className={mode === 'create' ? 'fun-button' : 'fun-button-green'}
+            onClick={mode === 'create' ? handleCreate : handleJoin}
+          >
+            {mode === 'create' ? '🎉 Create Amazing Game!' : '🚀 Join the Fun!'}
+          </button>
         </div>
-      )}
 
-      {error && <p className="text-red-600 mt-2">{error}</p>}
+        {gameId && (
+          <div className="bounce-in bg-gradient-to-r from-yellow-100 to-orange-100 border-4 border-yellow-400 rounded-3xl p-6">
+            <div className="text-center space-y-3">
+              <h3 className="text-2xl font-bold text-orange-800" style={{ fontFamily: 'Fredoka One' }}>
+                🎊 Game Created! 🎊
+              </h3>
+              <div className="bg-white rounded-2xl p-4 border-4 border-orange-300">
+                <p className="text-sm text-orange-600 font-bold mb-1">Share this magic code:</p>
+                <p className="text-4xl font-bold text-orange-800 pulse-glow" style={{ fontFamily: 'Fredoka One' }}>
+                  {gameId}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-orange-700 font-bold">🎭 Players in the game:</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {players.map((player, index) => (
+                    <span
+                      key={index}
+                      className="bg-gradient-to-r from-pink-300 to-purple-300 text-purple-800 px-3 py-1 rounded-full font-bold text-sm bounce-in"
+                    >
+                      🌟 {player}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {isHost && (
+                <button
+                  className="fun-button-orange wiggle"
+                  onClick={handleStart}
+                >
+                  🎮 START THE GAME! 🎮
+                </button>
+              )}
+              {!isHost && (
+                <p className="text-orange-600 font-bold animate-pulse">
+                  ⏳ Waiting for the game master to start... ⏳
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-100 border-4 border-red-400 rounded-2xl p-4 text-center">
+            <p className="text-red-700 font-bold">😅 Oops! {error}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

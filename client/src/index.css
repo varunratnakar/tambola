@@ -1,3 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Comic+Neue:wght@400;700&display=swap');
+
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Comic Neue', cursive;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .fun-button {
+    @apply bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
+  }
+  
+  .fun-button-green {
+    @apply bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
+  }
+  
+  .fun-button-orange {
+    @apply bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl;
+  }
+  
+  .fun-card {
+    @apply bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-6 border-4 border-yellow-300;
+  }
+  
+  .number-cell {
+    @apply w-12 h-12 flex items-center justify-center rounded-xl font-bold text-lg transition-all duration-300 transform hover:scale-110 cursor-pointer shadow-md;
+  }
+  
+  .number-cell-available {
+    @apply bg-gradient-to-br from-yellow-300 to-orange-400 text-purple-800 hover:from-yellow-400 hover:to-orange-500;
+  }
+  
+  .number-cell-called {
+    @apply bg-gradient-to-br from-purple-500 to-pink-500 text-white;
+  }
+  
+  .ticket-cell {
+    @apply w-12 h-12 flex items-center justify-center rounded-lg font-bold text-lg transition-all duration-300 transform hover:scale-105 cursor-pointer border-2;
+  }
+  
+  .ticket-cell-unmarked {
+    @apply bg-gradient-to-br from-blue-100 to-purple-100 border-blue-300 text-purple-800 hover:from-blue-200 hover:to-purple-200;
+  }
+  
+  .ticket-cell-marked {
+    @apply bg-gradient-to-br from-green-400 to-emerald-500 border-green-600 text-white shadow-lg;
+  }
+  
+  .bounce-in {
+    animation: bounceIn 0.6s ease-out;
+  }
+  
+  .pulse-glow {
+    animation: pulseGlow 2s infinite;
+  }
+  
+  .wiggle {
+    animation: wiggle 0.5s ease-in-out;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+  }
+}
+
+@keyframes wiggle {
+  0%, 7%, 14%, 21%, 28%, 35%, 42%, 49%, 56%, 63%, 70%, 77%, 84%, 91%, 98%, 100% {
+    transform: rotate(0deg);
+  }
+  3.5%, 10.5%, 17.5%, 24.5%, 31.5%, 38.5%, 45.5%, 52.5%, 59.5%, 66.5%, 73.5%, 80.5%, 87.5%, 94.5% {
+    transform: rotate(2deg);
+  }
+} 

@@ -1,8 +1,8 @@
 # example netlify.toml
 [build]
-  base = "client"
-  command = "npm install && npm run build"
-  publish = "dist"
+  base = "client/"
+  publish = "client/dist/"
+  command = "npm run build"
 
 [build.environment]
   VITE_SERVER_URL = "https://tambola-server.fly.dev"
