@@ -23,9 +23,10 @@ function Lobby({ onStart }) {
   useEffect(() => {
     console.log('Connecting to server:', SERVER_URL);
     
+    // Force WebSocket transport only to avoid long-polling session issues on Fly.io
     const socket = io(SERVER_URL, {
-      transports: ['polling', 'websocket'],
-      upgrade: true,
+      transports: ['websocket'], // disable HTTP long-polling
+      upgrade: false,
       timeout: 20000,
       forceNew: true
     });

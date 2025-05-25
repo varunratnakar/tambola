@@ -15,7 +15,9 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ["websocket"],
+  allowEIO3: false
 });
 
 const PORT = process.env.PORT || 4000;
