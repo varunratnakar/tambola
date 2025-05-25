@@ -24,10 +24,11 @@ function Lobby({ onStart }) {
     console.log('Connecting to server:', SERVER_URL);
     
     const socket = io(SERVER_URL, {
-      transports: ['polling', 'websocket'],
-      upgrade: true,
-      timeout: 20000,
-      forceNew: true
+      autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000
     });
 
     socketRef.current = socket;
