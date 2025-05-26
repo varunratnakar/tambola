@@ -219,6 +219,18 @@
     align-self: flex-start !important;
     margin-top: 0 !important;
   }
+  
+  /* Landscape tickets centering */
+  .all-tickets-container {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+  }
+  
+  .tickets-grid {
+    justify-content: center !important;
+    justify-items: center !important;
+  }
 }
 
 @keyframes bounceIn {
