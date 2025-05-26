@@ -1,5 +1,5 @@
-// Generates Tambola tickets using the strip-based algorithm
-// This ensures proper distribution of numbers across tickets and follows official Tambola rules
+// tambola_generator.js
+// Generates a strip of 6 Tambola tickets (3×9) using numbers 1–90 under standard rules.
 
 /**
  * Generate a full strip of 6 tickets.
@@ -31,12 +31,11 @@ function generateTambolaStrip() {
   do {
     assignCounts = columnNumbers.map(nums => {
       const total = nums.length;
-      // Start by giving each ticket 1 number (or 0 if fewer numbers than tickets)
       const base = Math.min(1, Math.floor(total / 6));
       const counts = Array(6).fill(base);
       let remaining = total - base * 6;
-      // Distribute remaining randomly, capping at 3 per ticket
       const idxs = [...Array(6).keys()];
+      // Distribute remaining randomly, capping at 3 per ticket
       while (remaining > 0) {
         shuffle(idxs);
         for (const i of idxs) {
@@ -49,13 +48,13 @@ function generateTambolaStrip() {
       }
       return counts;
     });
-    // Check each ticket ends up with exactly 15 numbers
+    // Ensure each ticket has exactly 15 numbers
     const ticketTotals = Array(6).fill(0);
     assignCounts.forEach(col => col.forEach((c, t) => ticketTotals[t] += c));
     if (ticketTotals.every(sum => sum === 15)) break;
   } while (true);
 
-  // 3. Build each ticket grid, assigning numbers to rows.
+  // 3. Build each ticket grid, assigning numbers to rows with randomized combos.
   const strip = [];
   for (let t = 0; t < 6; t++) {
     const counts = assignCounts.map(col => col[t]);
@@ -79,12 +78,27 @@ function generateTambolaStrip() {
 }
 
 /**
+ * Shuffle an array in-place using Fisher–Yates.
+ */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
  * Assigns positions in a 3×9 grid for one ticket,
  * given the number of entries needed in each column,
  * ensuring each row has exactly 5 entries.
+ * Randomizes the order of row-combos per column for more even distribution.
  */
 function assignRowsForTicket(colCounts) {
   const rows = 3, cols = 9;
+  // Pre-shuffle combos for each column
+  const combosList = colCounts.map(n => shuffle(getRowCombos(n).map(c => [...c])));
+
   const placement = Array.from({ length: rows }, () => Array(cols).fill(0));
   const rowSums = Array(rows).fill(0);
 
@@ -92,16 +106,19 @@ function assignRowsForTicket(colCounts) {
     if (col === cols) {
       return rowSums.every(sum => sum === 5);
     }
-    const need = colCounts[col];
-    for (const combo of getRowCombos(need)) {
-      // Check feasibility
+    for (const combo of combosList[col]) {
+      // Feasibility check
       let valid = combo.every((bit, r) => !bit || rowSums[r] < 5);
       if (!valid) continue;
       // Place
-      combo.forEach((bit, r) => { if (bit) { placement[r][col] = 1; rowSums[r]++; } });
+      combo.forEach((bit, r) => {
+        if (bit) { placement[r][col] = 1; rowSums[r]++; }
+      });
       if (backtrack(col + 1)) return true;
       // Unplace
-      combo.forEach((bit, r) => { if (bit) { placement[r][col] = 0; rowSums[r]--; } });
+      combo.forEach((bit, r) => {
+        if (bit) { placement[r][col] = 0; rowSums[r]--; }
+      });
     }
     return false;
   }
@@ -118,6 +135,7 @@ const rowCombosMap = {
   3: [[1,1,1]],
 };
 function getRowCombos(n) { return rowCombosMap[n] || []; }
+
 
 /**
  * Shuffle an array in-place using Fisher–Yates.
