@@ -30,32 +30,56 @@ app.get('/', (_, res) => res.send('Tambola server is running'));
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 
-  socket.on('create_game', ({ hostName }, cb) => {
+  socket.on('create_game', ({ pricePerTicket, prizes, numTickets = 1 }, cb) => {
     try {
-      const { gameId, ticket, players } = gameManager.createGame(socket.id, hostName);
+      const { gameId, tickets, players } = gameManager.createGame(socket.id, pricePerTicket, prizes, numTickets);
       socket.join(gameId);
-      cb({ status: 'ok', gameId, ticket, players });
+      cb({ status: 'ok', gameId, tickets, players });
     } catch (err) {
       cb({ status: 'error', message: err.message });
     }
   });
 
-  socket.on('join_game', ({ gameId, playerName }, cb) => {
+  socket.on('get_game_details', ({ gameId }, cb) => {
     try {
-      const { ticket, players } = gameManager.joinGame(gameId, socket.id, playerName);
+      const gameDetails = gameManager.getGameDetails(gameId);
+      cb({ status: 'ok', gameDetails });
+    } catch (err) {
+      cb({ status: 'error', message: err.message });
+    }
+  });
+
+  socket.on('join_game', ({ gameId, playerName, numTickets = 1 }, cb) => {
+    try {
+      const { tickets, players } = gameManager.joinGame(gameId, socket.id, playerName, numTickets);
       socket.join(gameId);
       
       // Get the game to notify all players
       const game = gameManager.getGame(gameId);
       if (game) {
-        // Notify each player with their personalized player list
+        // Notify each player with updated player list
         Object.keys(game.players).forEach(playerId => {
           const playerList = gameManager.getPlayersForUser(gameId, playerId);
           io.to(playerId).emit('players_updated', { players: playerList });
         });
       }
       
-      cb({ status: 'ok', ticket, players });
+      cb({ status: 'ok', tickets, players });
+    } catch (err) {
+      cb({ status: 'error', message: err.message });
+    }
+  });
+
+  socket.on('get_game_info', ({ gameId }, cb) => {
+    try {
+      const game = gameManager.getGame(gameId);
+      if (game) {
+        io.to(socket.id).emit('game_info', { 
+          prizes: game.prizes,
+          winners: game.winners 
+        });
+      }
+      cb({ status: 'ok' });
     } catch (err) {
       cb({ status: 'error', message: err.message });
     }
@@ -65,6 +89,16 @@ io.on('connection', (socket) => {
     try {
       gameManager.startGame(gameId, socket.id);
       io.to(gameId).emit('game_started', { gameId });
+      
+      // Send game info to all players when game starts
+      const game = gameManager.getGame(gameId);
+      if (game) {
+        io.to(gameId).emit('game_info', { 
+          prizes: game.prizes,
+          winners: game.winners 
+        });
+      }
+      
       cb({ status: 'ok' });
     } catch (err) {
       cb({ status: 'error', message: err.message });
@@ -96,21 +130,32 @@ io.on('connection', (socket) => {
     try {
       const result = gameManager.validateClaim(gameId, socket.id, claimType, lines);
       if (result.valid) {
+        const game = gameManager.getGame(gameId);
         let prizeMessage = '';
+        let prizeAmount = 0;
+        let lineIndex = null;
+        
         if (claimType === 'line') {
           const lineNames = { topLine: 'Top Line', middleLine: 'Middle Line', bottomLine: 'Bottom Line' };
           prizeMessage = lineNames[result.lineType];
+          prizeAmount = game.prizes[result.lineType];
+          lineIndex = lines?.[0] ?? 0;
         } else if (claimType === 'corners') {
           prizeMessage = 'Corners';
+          prizeAmount = game.prizes.corners;
         } else if (claimType === 'house') {
           prizeMessage = 'Full House';
+          prizeAmount = game.prizes.house;
         }
         
         io.to(gameId).emit('claim_success', { 
           playerId: socket.id, 
           playerName: result.playerName,
           claimType,
-          prizeMessage 
+          prizeMessage,
+          prizeAmount,
+          lineIndex,
+          ticketIndex: result.ticketIndex
         });
       } else {
         socket.emit('claim_failed', { reason: result.reason });

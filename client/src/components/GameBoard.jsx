@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 
-function NumberGrid({ drawnNumbers, onClick }) {
+function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
   const nums = Array.from({ length: 90 }, (_, i) => i + 1);
   return (
     <div className="grid grid-cols-9 sm:grid-cols-10 gap-1">
       {nums.map((n) => (
         <div
           key={n}
-          onClick={() => onClick && onClick(n)}
-          className={`cell ${drawnNumbers.includes(n) ? 'cell-called' : 'cell-number'}`}
+          onClick={() => isClickable && onClick && onClick(n)}
+          className={`cell ${drawnNumbers.includes(n) ? 'cell-called' : 'cell-number'} ${
+            isClickable ? 'cursor-pointer' : 'cursor-default'
+          }`}
         >
           {n}
         </div>
@@ -17,22 +19,22 @@ function NumberGrid({ drawnNumbers, onClick }) {
   );
 }
 
-function TicketGrid({ ticket, marked, onCell, latestNumber }) {
+function TicketGrid({ ticket, marked, onCell, latestNumber, ticketIndex, totalTickets }) {
   return (
-    <div className="ticket-container">
+    <div className="ticket-item">
       <div 
-        className="bg-white border-4 border-gray-800 rounded-lg p-4 shadow-xl mx-auto relative"
+        className="bg-white border-4 border-gray-800 rounded-lg p-3 shadow-lg mx-auto relative"
         style={{
-          width: 'var(--optimal-width-portrait)',
-          maxWidth: '90vw' // Fallback for very small screens
+          width: totalTickets === 1 ? 'min(500px, 90vw)' : 'min(300px, 90vw)',
+          maxWidth: '90vw'
         }}
       >
         {/* Latest number overlay */}
         {latestNumber && (
           <div 
-            className="absolute top-2 left-5 flex items-center justify-center bounce-in animate-fade-out"
+            className="absolute top-1 left-3 flex items-center justify-center bounce-in animate-fade-out"
             style={{
-              fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
+              fontSize: 'clamp(1rem, 3vw, 1.5rem)',
               fontWeight: 'bold',
               color: '#dc2626',
               zIndex: 10,
@@ -43,12 +45,12 @@ function TicketGrid({ ticket, marked, onCell, latestNumber }) {
           </div>
         )}
         
-        <h3 className="text-center font-bold text-gray-800 mb-3" 
+        <h3 className="text-center font-bold text-gray-800 mb-2" 
             style={{ 
               fontFamily: 'Fredoka One',
-              fontSize: 'clamp(0.875rem, 3vw, 1.5rem)'
+              fontSize: totalTickets === 1 ? 'clamp(0.875rem, 3vw, 1.5rem)' : 'clamp(0.75rem, 2.5vw, 1rem)'
             }}>
-          🎫 TAMBOLA TICKET 🎫
+          🎫 TICKET {ticketIndex + 1} 🎫
         </h3>
         <div className="border-2 border-gray-600">
           {ticket.map((row, rowIdx) => (
@@ -63,12 +65,12 @@ function TicketGrid({ ticket, marked, onCell, latestNumber }) {
                     ${!num 
                       ? 'bg-gray-100' 
                       : marked.includes(num) 
-                        ? 'bg-red-500 text-white' 
+                        ? 'cell-scratched' 
                         : 'bg-white text-gray-800 hover:bg-blue-50'
                     }
                   `}
                   style={{
-                    fontSize: 'clamp(0.875rem, 2.5vw, 1.5rem)'
+                    fontSize: totalTickets === 1 ? 'clamp(0.875rem, 2.5vw, 1.5rem)' : 'clamp(0.625rem, 2vw, 1rem)'
                   }}
                 >
                   {num || ''}
@@ -82,26 +84,97 @@ function TicketGrid({ ticket, marked, onCell, latestNumber }) {
   );
 }
 
-function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobby }) {
+function AllTicketsView({ tickets, marked, onCell, latestNumber }) {
+  if (!tickets || tickets.length === 0) return null;
+
+  return (
+    <div className="all-tickets-container">
+      {tickets.length === 1 ? (
+        // Single ticket - full width
+        <div className="single-ticket-view">
+          <TicketGrid
+            ticket={tickets[0]}
+            marked={marked[0] || []}
+            onCell={(num) => onCell(num, 0)}
+            latestNumber={latestNumber}
+            ticketIndex={0}
+            totalTickets={1}
+          />
+        </div>
+      ) : (
+        // Multiple tickets - grid layout
+        <div className="multiple-tickets-view">
+          <div className="tickets-grid">
+            {tickets.map((ticket, index) => (
+              <TicketGrid
+                key={index}
+                ticket={ticket}
+                marked={marked[index] || []}
+                onCell={(num) => onCell(num, index)}
+                latestNumber={latestNumber}
+                ticketIndex={index}
+                totalTickets={tickets.length}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLobby }) {
+  // Multiple tickets support enabled
   const [drawn, setDrawn] = useState([]);
   const [latest, setLatest] = useState(null);
-  const [ticket, setTicket] = useState(initialTicket || (isHost ? null : []));
-  const [marked, setMarked] = useState([]);
+  const [tickets, setTickets] = useState(initialTickets || []);
+  const [marked, setMarked] = useState({}); // Object with ticketIndex as key and array of marked numbers as value
   const [gameStarted, setGameStarted] = useState(false);
   const [gameCompleted, setGameCompleted] = useState(false);
   const [gameEndInfo, setGameEndInfo] = useState(null);
   const [gameCancelled, setGameCancelled] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  
+  // Prize and winner tracking
+  const [gamePrizes, setGamePrizes] = useState({
+    topLine: 100,
+    middleLine: 100,
+    bottomLine: 100,
+    corners: 150,
+    house: 500
+  });
+  const [winners, setWinners] = useState({
+    topLine: null,
+    middleLine: null,
+    bottomLine: null,
+    corners: null,
+    house: null
+  });
+  const [myWinnings, setMyWinnings] = useState([]);
+  
+  // Auto-draw functionality for host
+  const [autoDrawEnabled, setAutoDrawEnabled] = useState(false);
+  const [autoDrawInterval, setAutoDrawInterval] = useState(5); // seconds
+  const [autoDrawTimer, setAutoDrawTimer] = useState(null);
+  const [nextDrawCountdown, setNextDrawCountdown] = useState(0);
+
+  // Request game info on mount
+  useEffect(() => {
+    if (socket && gameId) {
+      socket.emit('get_game_info', { gameId }, () => {});
+    }
+  }, [socket, gameId]);
 
   // DEBUG – remove later
   useEffect(() => {
-    console.log('GB props:', { gameId, isHost, initialTicket });
+    console.log('GB props:', { gameId, isHost, initialTickets });
+    console.log('tickets state:', tickets);
     console.log('socket in GameBoard:', socket);
     if (socket) {
       console.log('socket id:', socket.id);
       window.socket = socket;            // expose for manual testing
     }
-  }, []);
+  }, [initialTickets, tickets]);
 
   useEffect(() => {
     const onNumber = ({ number }) => {
@@ -110,8 +183,27 @@ function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobb
       setGameStarted(true);
     };
     
-    const onClaimSuccess = ({ playerId, playerName, prizeMessage }) => {
+    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount }) => {
       alert(`🎉 Amazing! ${playerName} won ${prizeMessage}! 🎉`);
+      
+      // Update winners state
+      if (claimType === 'line') {
+        const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+        const lineType = lineTypes[lineIndex || 0];
+        setWinners(prev => ({ ...prev, [lineType]: playerName }));
+      } else {
+        setWinners(prev => ({ ...prev, [claimType]: playerName }));
+      }
+      
+      // If this player won, add to their winnings
+      if (playerId === socket.id) {
+        setMyWinnings(prev => [...prev, { prize: prizeMessage, amount: prizeAmount }]);
+      }
+      
+      // Delay auto-draw timer if host and auto-draw is enabled
+      if (isHost && autoDrawEnabled) {
+        delayAutoDraw();
+      }
     };
 
     const onClaimFailed = ({ reason }) => {
@@ -128,11 +220,17 @@ function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobb
       setCancelReason(reason);
     };
 
+    const onGameInfo = ({ prizes, winners: gameWinners }) => {
+      if (prizes) setGamePrizes(prizes);
+      if (gameWinners) setWinners(gameWinners);
+    };
+
     socket.on('number_drawn', onNumber);
     socket.on('claim_success', onClaimSuccess);
     socket.on('claim_failed', onClaimFailed);
     socket.on('game_completed', onGameCompleted);
     socket.on('game_cancelled', onGameCancelled);
+    socket.on('game_info', onGameInfo);
     
     return () => {
       socket.off('number_drawn', onNumber);
@@ -140,6 +238,7 @@ function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobb
       socket.off('claim_failed', onClaimFailed);
       socket.off('game_completed', onGameCompleted);
       socket.off('game_cancelled', onGameCancelled);
+      socket.off('game_info', onGameInfo);
     };
   }, [socket]);
 
@@ -156,13 +255,88 @@ function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobb
 
   const drawRandom = () => socket.emit('draw_number', { gameId }, () => {});
   const drawSpecific = (n) => socket.emit('draw_number', { gameId, number: n }, () => {});
-  const toggleMark = (n) => setMarked((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
+
+  // Auto-draw functionality
+  const startAutoDraw = () => {
+    if (autoDrawTimer) {
+      clearInterval(autoDrawTimer);
+    }
+    
+    setNextDrawCountdown(autoDrawInterval);
+    
+    const timer = setInterval(() => {
+      if (!gameCompleted && !gameCancelled) {
+        drawRandom();
+        setNextDrawCountdown(autoDrawInterval); // Reset countdown after each draw
+      } else {
+        stopAutoDraw();
+      }
+    }, autoDrawInterval * 1000);
+    
+    // Countdown timer
+    const countdownTimer = setInterval(() => {
+      setNextDrawCountdown(prev => {
+        if (prev <= 1) {
+          return autoDrawInterval; // Reset to interval when reaching 0
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    setAutoDrawTimer({ main: timer, countdown: countdownTimer });
+    setAutoDrawEnabled(true);
+  };
+
+  const stopAutoDraw = () => {
+    if (autoDrawTimer) {
+      clearInterval(autoDrawTimer.main);
+      clearInterval(autoDrawTimer.countdown);
+      setAutoDrawTimer(null);
+    }
+    setAutoDrawEnabled(false);
+    setNextDrawCountdown(0);
+  };
+
+  const delayAutoDraw = () => {
+    if (autoDrawTimer && autoDrawEnabled) {
+      // Extend the countdown by 3x the normal interval
+      const delayTime = autoDrawInterval * 3;
+      setNextDrawCountdown(delayTime);
+    }
+  };
+
+  // Cleanup auto-draw on unmount or game end
+  useEffect(() => {
+    if (gameCompleted || gameCancelled) {
+      stopAutoDraw();
+    }
+  }, [gameCompleted, gameCancelled]);
+
+  useEffect(() => {
+    return () => {
+      if (autoDrawTimer) {
+        clearInterval(autoDrawTimer.main);
+        clearInterval(autoDrawTimer.countdown);
+      }
+    };
+  }, [autoDrawTimer]);
+  
+  const toggleMark = (n, ticketIndex) => {
+    setMarked((prev) => {
+      const currentMarked = prev[ticketIndex] || [];
+      const newMarked = currentMarked.includes(n) 
+        ? currentMarked.filter((x) => x !== n) 
+        : [...currentMarked, n];
+      return { ...prev, [ticketIndex]: newMarked };
+    });
+  };
   
   const handleClaim = (type, lineIndex = null) => {
     const payload = { gameId, claimType: type };
     if (type === 'line' && lineIndex !== null) {
       payload.lines = [lineIndex];
     }
+    // Remove ticketIndex - let server scan all tickets
     socket.emit('claim', payload, () => {});
   };
 
@@ -234,193 +408,255 @@ function GameBoard({ socket, gameId, isHost, ticket: initialTicket, onBackToLobb
         </div>
       )}
 
+      {/* My Winnings Display - Only show when game is completed */}
+      {!isHost && myWinnings.length > 0 && gameCompleted && (
+        <div className="bg-green-100 border-2 border-green-400 rounded-lg p-3 mx-4 mt-4">
+          <h3 className="font-bold text-green-800 mb-2">🏆 Your Winnings:</h3>
+          <div className="space-y-1">
+            {myWinnings.map((winning, idx) => (
+              <div key={idx} className="flex justify-between items-center text-sm">
+                <span className="text-green-700">{winning.prize}</span>
+                <span className="font-bold text-green-800">₹{winning.amount}</span>
+              </div>
+            ))}
+            <div className="border-t border-green-300 pt-1 mt-2">
+              <div className="flex justify-between items-center font-bold">
+                <span className="text-green-800">Total:</span>
+                <span className="text-green-800">₹{myWinnings.reduce((sum, w) => sum + w.amount, 0)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!gameCancelled && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4 landscape:p-2 landscape:space-y-2">
           {isHost ? (
             <>
-              <button 
-                className="btn-primary w-full mb-3" 
-                onClick={drawRandom}
-                disabled={gameCompleted}
-                style={{ opacity: gameCompleted ? 0.5 : 1 }}
-              >
-                {gameCompleted ? 'Game Completed' : 'Draw Random'}
-              </button>
-              {!gameCompleted && !gameCancelled && (
+              {/* Host Controls */}
+              <div className="space-y-3">
+                {/* Manual Draw Button */}
                 <button 
-                  className="btn-danger w-full mb-3" 
-                  onClick={cancelGame}
+                  className="btn-primary w-full" 
+                  onClick={drawRandom}
+                  disabled={gameCompleted || autoDrawEnabled}
+                  style={{ opacity: (gameCompleted || autoDrawEnabled) ? 0.5 : 1 }}
                 >
-                  ❌ Cancel Game
+                  {gameCompleted ? 'Game Completed' : autoDrawEnabled ? 'Auto-Draw Active' : '🎲 Draw Random Number'}
                 </button>
-              )}
-              <NumberGrid drawnNumbers={drawn} onClick={gameCompleted ? null : drawSpecific} />
+
+                {/* Auto-Draw Controls */}
+                {!gameCompleted && !gameCancelled && (
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                    <h3 className="font-bold text-blue-800 mb-3">⏰ Auto-Draw</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <label className="text-blue-700 font-medium">Interval:</label>
+                        <select
+                          className="border border-blue-400 rounded px-3 py-1 font-bold"
+                          value={autoDrawInterval}
+                          onChange={(e) => setAutoDrawInterval(parseInt(e.target.value))}
+                          disabled={autoDrawEnabled}
+                        >
+                          <option value={3}>3 seconds</option>
+                          <option value={5}>5 seconds</option>
+                          <option value={10}>10 seconds</option>
+                          <option value={15}>15 seconds</option>
+                          <option value={30}>30 seconds</option>
+                          <option value={60}>1 minute</option>
+                        </select>
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          className={`flex-1 py-2 px-4 rounded-lg font-bold transition ${
+                            autoDrawEnabled 
+                              ? 'bg-red-500 text-white hover:bg-red-600' 
+                              : 'bg-green-500 text-white hover:bg-green-600'
+                          }`}
+                          onClick={autoDrawEnabled ? stopAutoDraw : startAutoDraw}
+                        >
+                          {autoDrawEnabled ? '⏸️ Stop Auto-Draw' : '▶️ Start Auto-Draw'}
+                        </button>
+                      </div>
+                      
+                      {/* Countdown Display */}
+                      {autoDrawEnabled && (
+                        <div className="text-center">
+                          <div className="bg-blue-100 border border-blue-400 rounded-lg py-2 px-4">
+                            <span className="text-blue-800 font-bold">
+                              Next draw in: <span className="text-xl">{nextDrawCountdown}s</span>
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cancel Game Button */}
+                {!gameCompleted && !gameCancelled && (
+                  <button 
+                    className="btn-danger w-full" 
+                    onClick={cancelGame}
+                  >
+                    ❌ Cancel Game
+                  </button>
+                )}
+              </div>
+
+              {/* Number Grid - View Only for Host */}
+              <div className="mt-4">
+                <h3 className="text-center font-bold text-purple-800 mb-3" style={{ fontFamily: 'Fredoka One' }}>
+                  📊 Number Grid
+                </h3>
+                <NumberGrid drawnNumbers={drawn} onClick={null} isClickable={false} />
+              </div>
             </>
           ) : (
-            ticket && !gameCompleted && (
+            (() => {
+              console.log('Render check:', { tickets, ticketsLength: tickets?.length, gameCompleted, isHost });
+              return !isHost && tickets && tickets.length > 0 && !gameCompleted;
+            })() && (
               <>
                 {/* Portrait layout - stacked */}
                 <div className="block landscape:hidden">
-                  <TicketGrid ticket={ticket} marked={marked} onCell={toggleMark} latestNumber={latest} />
+                  <AllTicketsView
+                    tickets={tickets}
+                    marked={marked}
+                    onCell={toggleMark}
+                    latestNumber={latest}
+                  />
                   
-                  <div className="claim-buttons-portrait space-y-2 mt-4">
-                    <h3 className="text-center font-bold text-purple-800" 
-                        style={{ 
-                          fontFamily: 'Fredoka One',
-                          fontSize: 'var(--button-font-size)'
-                        }}>
-                      🏆 Claim Prize 🏆
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 0)}
-                      >
-                        🔥 Top
-                      </button>
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 1)}
-                      >
-                        ⭐ Mid
-                      </button>
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 2)}
-                      >
-                        💫 Bot
-                      </button>
-                      <button 
-                        className="btn-secondary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('corners')}
-                      >
-                        🔸 Corners
-                      </button>
-                      <button 
-                        className="btn-danger col-span-2" 
-                        style={{
-                          height: 'var(--button-height)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('house')}
-                      >
-                        🎉 Full House
-                      </button>
+                  {/* Claim buttons - below tickets */}
+                  <div className="mt-4 px-2">
+                    <div className="bg-white border-2 border-purple-400 rounded-lg p-3 shadow-lg">
+                      <h3 className="text-center font-bold text-purple-800 mb-3 text-sm">
+                        🏆 Claim Prize 🏆
+                      </h3>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.topLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 0)}
+                          disabled={!!winners.topLine}
+                        >
+                          <div className="text-center">
+                            <div>🔥 Top</div>
+                            <div className="text-xs">₹{gamePrizes.topLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.middleLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 1)}
+                          disabled={!!winners.middleLine}
+                        >
+                          <div className="text-center">
+                            <div>⭐ Mid</div>
+                            <div className="text-xs">₹{gamePrizes.middleLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.bottomLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 2)}
+                          disabled={!!winners.bottomLine}
+                        >
+                          <div className="text-center">
+                            <div>💫 Bot</div>
+                            <div className="text-xs">₹{gamePrizes.bottomLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.corners ? 'btn-claimed' : 'btn-secondary'}`}
+                          onClick={() => handleClaim('corners')}
+                          disabled={!!winners.corners}
+                        >
+                          <div className="text-center">
+                            <div>🔸 Corner</div>
+                            <div className="text-xs">₹{gamePrizes.corners}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 col-span-2 ${winners.house ? 'btn-claimed' : 'btn-danger'}`}
+                          onClick={() => handleClaim('house')}
+                          disabled={!!winners.house}
+                        >
+                          <div className="text-center">
+                            <div>🎉 Full House</div>
+                            <div className="text-xs">₹{gamePrizes.house}</div>
+                          </div>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Landscape layout - buttons on both sides */}
-                <div className="hidden landscape:flex landscape:gap-4 landscape:items-start">
-                  {/* Left side buttons - Lines */}
-                  <div className="claim-buttons-landscape-left flex flex-col justify-start space-y-3">
-                    <h3 className="text-center font-bold text-purple-800 mb-3" 
-                        style={{ 
-                          fontFamily: 'Fredoka One',
-                          fontSize: 'var(--button-font-size)'
-                        }}>
-                      📏 Lines
-                    </h3>
-                    <div className="flex flex-col space-y-3">
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          width: 'var(--button-width)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 0)}
-                      >
-                        🔥 Top Line
-                      </button>
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          width: 'var(--button-width)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 1)}
-                      >
-                        ⭐ Middle Line
-                      </button>
-                      <button 
-                        className="btn-primary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          width: 'var(--button-width)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('line', 2)}
-                      >
-                        💫 Bottom Line
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Center - Ticket */}
-                  <div className="flex-1">
-                    <TicketGrid ticket={ticket} marked={marked} onCell={toggleMark} latestNumber={latest} />
-                  </div>
+                {/* Landscape layout - tickets with buttons below */}
+                <div className="hidden landscape:block">
+                  <AllTicketsView
+                    tickets={tickets}
+                    marked={marked}
+                    onCell={toggleMark}
+                    latestNumber={latest}
+                  />
                   
-                  {/* Right side buttons - Corners & House */}
-                  <div className="claim-buttons-landscape-right flex flex-col justify-start space-y-3">
-                    <h3 className="text-center font-bold text-purple-800 mb-3" 
-                        style={{ 
-                          fontFamily: 'Fredoka One',
-                          fontSize: 'var(--button-font-size)'
-                        }}>
-                      🏆 Special
-                    </h3>
-                    <div className="flex flex-col space-y-3">
-                      <button 
-                        className="btn-secondary" 
-                        style={{
-                          height: 'var(--button-height)',
-                          width: 'var(--button-width)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('corners')}
-                      >
-                        🔸 Corners
-                      </button>
-                      <button 
-                        className="btn-danger" 
-                        style={{
-                          height: 'var(--button-height)',
-                          width: 'var(--button-width)',
-                          fontSize: 'var(--button-font-size)',
-                          padding: '12px 16px'
-                        }}
-                        onClick={() => handleClaim('house')}
-                      >
-                        🎉 Full House
-                      </button>
+                  {/* Claim buttons - below tickets for landscape */}
+                  <div className="mt-4 px-2">
+                    <div className="bg-white border-2 border-purple-400 rounded-lg p-3 shadow-lg">
+                      <h3 className="text-center font-bold text-purple-800 mb-3 text-sm">
+                        🏆 Claim Prize 🏆
+                      </h3>
+                      <div className="grid grid-cols-5 gap-2">
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.topLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 0)}
+                          disabled={!!winners.topLine}
+                        >
+                          <div className="text-center">
+                            <div>🔥 Top</div>
+                            <div className="text-xs">₹{gamePrizes.topLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.middleLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 1)}
+                          disabled={!!winners.middleLine}
+                        >
+                          <div className="text-center">
+                            <div>⭐ Mid</div>
+                            <div className="text-xs">₹{gamePrizes.middleLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.bottomLine ? 'btn-claimed' : 'btn-primary'}`}
+                          onClick={() => handleClaim('line', 2)}
+                          disabled={!!winners.bottomLine}
+                        >
+                          <div className="text-center">
+                            <div>💫 Bot</div>
+                            <div className="text-xs">₹{gamePrizes.bottomLine}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.corners ? 'btn-claimed' : 'btn-secondary'}`}
+                          onClick={() => handleClaim('corners')}
+                          disabled={!!winners.corners}
+                        >
+                          <div className="text-center">
+                            <div>🔸 Corner</div>
+                            <div className="text-xs">₹{gamePrizes.corners}</div>
+                          </div>
+                        </button>
+                        <button 
+                          className={`btn-claim-compact text-xs py-2 ${winners.house ? 'btn-claimed' : 'btn-danger'}`}
+                          onClick={() => handleClaim('house')}
+                          disabled={!!winners.house}
+                        >
+                          <div className="text-center">
+                            <div>🎉 House</div>
+                            <div className="text-xs">₹{gamePrizes.house}</div>
+                          </div>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

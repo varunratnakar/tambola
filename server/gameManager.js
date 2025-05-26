@@ -8,15 +8,23 @@ class GameManager {
     this.playerGameMap = new Map(); // socketId -> gameId
   }
 
-  createGame(hostSocketId, hostName) {
+  createGame(hostSocketId, pricePerTicket = 50, prizes = {}, numTickets = 1) {
     const gameId = uuidv4().slice(0, 6);
     const game = {
       id: gameId,
       host: hostSocketId,
-      players: {}, // socketId -> { name, ticket, status }
+      players: {}, // socketId -> { name, tickets, status }
       drawnNumbers: [],
       remainingNumbers: Array.from({ length: 90 }, (_, i) => i + 1),
       started: false,
+      pricePerTicket,
+      prizes: {
+        topLine: prizes.topLine || 100,
+        middleLine: prizes.middleLine || 100,
+        bottomLine: prizes.bottomLine || 100,
+        corners: prizes.corners || 150,
+        house: prizes.house || 500,
+      },
       winners: {
         topLine: null,
         middleLine: null,
@@ -25,37 +33,44 @@ class GameManager {
         house: null,
       },
     };
-    // add host as first player
-    const ticket = generateTicket();
+    // Host doesn't get tickets - they just manage the game
     game.players[hostSocketId] = {
-      name: hostName || 'Host',
-      ticket,
+      name: 'Host',
+      tickets: [], // Host has no tickets
       status: {},
     };
 
     this.games.set(gameId, game);
     this.playerGameMap.set(hostSocketId, gameId);
-    // Return empty players list for host (they don't see themselves)
-    return { gameId, ticket, players: [] };
+    // Return empty players list and no tickets for host
+    return { gameId, tickets: [], players: [] };
   }
 
-  joinGame(gameId, socketId, playerName) {
+  joinGame(gameId, socketId, playerName, numTickets = 1) {
     const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (game.started) throw new Error('Game already started');
 
-    const ticket = generateTicket();
+    const tickets = [];
+    for (let i = 0; i < Math.min(numTickets, 6); i++) { // Max 6 tickets per player
+      tickets.push(generateTicket());
+    }
+    
     game.players[socketId] = {
-      name: playerName || 'Player',
-      ticket,
+      name: playerName,
+      tickets,
       status: {},
     };
     this.playerGameMap.set(socketId, gameId);
-    // Return only non-host players (exclude host and current player)
+    
+    // Return players with ticket counts (exclude host)
     const players = Object.entries(game.players)
-      .filter(([socketId, player]) => socketId !== game.host && player.name !== playerName)
-      .map(([_, player]) => player.name);
-    return { ticket, players };
+      .filter(([socketId, player]) => socketId !== game.host)
+      .map(([_, player]) => ({
+        name: player.name,
+        ticketCount: player.tickets.length
+      }));
+    return { tickets, players };
   }
 
   startGame(gameId, socketId) {
@@ -134,53 +149,81 @@ class GameManager {
     const player = game.players[socketId];
     if (!player) throw new Error('Player not in game');
 
-    // Basic validation: all claimed numbers should be in drawnNumbers
-    const { ticket } = player;
-    const flatTicketNumbers = ticket.flat().filter(Boolean);
+    const { tickets } = player;
+    if (!tickets || tickets.length === 0) {
+      return { valid: false, reason: 'No tickets found' };
+    }
 
+    // Scan all tickets to find a valid claim
+    for (let ticketIndex = 0; ticketIndex < tickets.length; ticketIndex++) {
+      const ticket = tickets[ticketIndex];
+      const flatTicketNumbers = ticket.flat().filter(Boolean);
+
+      if (claimType === 'line') {
+        const lineIndex = lines?.[0] ?? 0;
+        const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+        const lineType = lineTypes[lineIndex];
+        
+        if (game.winners[lineType]) {
+          continue; // This prize already claimed, check next ticket
+        }
+        
+        const lineNumbers = ticket[lineIndex].filter(Boolean);
+        const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
+        if (allCalled) {
+          game.winners[lineType] = player.name;
+          return { valid: true, lineType, playerName: player.name, ticketIndex };
+        }
+      } else if (claimType === 'corners') {
+        if (game.winners.corners) {
+          continue; // Prize already claimed, check next ticket
+        }
+        
+        // Corner positions: [0,0], [0,8], [2,0], [2,8]
+        const cornerNumbers = [
+          ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
+        ].filter(Boolean);
+        
+        const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
+        if (allCalled) {
+          game.winners.corners = player.name;
+          return { valid: true, playerName: player.name, ticketIndex };
+        }
+      } else if (claimType === 'house') {
+        if (game.winners.house) {
+          continue; // Prize already claimed, check next ticket
+        }
+        
+        const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
+        if (allCalled) {
+          game.winners.house = player.name;
+          return { valid: true, playerName: player.name, ticketIndex };
+        }
+      }
+    }
+
+    // No valid claim found in any ticket
     if (claimType === 'line') {
       const lineIndex = lines?.[0] ?? 0;
-      const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+      const lineTypes = ['Top Line', 'Middle Line', 'Bottom Line'];
       const lineType = lineTypes[lineIndex];
       
-      if (game.winners[lineType]) {
-        return { valid: false, reason: `${lineType.replace('Line', ' Line')} already claimed` };
+      if (game.winners[['topLine', 'middleLine', 'bottomLine'][lineIndex]]) {
+        return { valid: false, reason: `${lineType} already claimed` };
       }
-      
-      const lineNumbers = ticket[lineIndex].filter(Boolean);
-      const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        game.winners[lineType] = player.name;
-        return { valid: true, lineType, playerName: player.name };
-      }
-      return { valid: false, reason: 'Not all numbers called' };
+      return { valid: false, reason: `${lineType} not complete on any ticket` };
     } else if (claimType === 'corners') {
       if (game.winners.corners) {
         return { valid: false, reason: 'Corners already claimed' };
       }
-      
-      // Corner positions: [0,0], [0,8], [2,0], [2,8]
-      const cornerNumbers = [
-        ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
-      ].filter(Boolean);
-      
-      const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        game.winners.corners = player.name;
-        return { valid: true, playerName: player.name };
-      }
-      return { valid: false, reason: 'Not all corner numbers called' };
+      return { valid: false, reason: 'Corners not complete on any ticket' };
     } else if (claimType === 'house') {
       if (game.winners.house) {
         return { valid: false, reason: 'House already claimed' };
       }
-      const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        game.winners.house = player.name;
-        return { valid: true, playerName: player.name };
-      }
-      return { valid: false, reason: 'Not all numbers called' };
+      return { valid: false, reason: 'House not complete on any ticket' };
     }
+    
     return { valid: false, reason: 'Invalid claim type' };
   }
 
@@ -204,17 +247,32 @@ class GameManager {
     return this.games.get(gameId?.toLowerCase?.() || gameId);
   }
 
+  getGameDetails(gameId) {
+    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    if (!game) throw new Error('Invalid game ID');
+    if (game.started) throw new Error('Game already started');
+    
+    // Count players excluding the host
+    const playerCount = Object.keys(game.players).filter(socketId => socketId !== game.host).length;
+    
+    return {
+      pricePerTicket: game.pricePerTicket,
+      prizes: game.prizes,
+      playerCount
+    };
+  }
+
   getPlayersForUser(gameId, socketId) {
     const game = this.games.get(gameId?.toLowerCase?.() || gameId);
     if (!game) return [];
     
-    const currentPlayer = game.players[socketId];
-    if (!currentPlayer) return [];
-    
-    // Return all players except host and current user
+    // Return all players with ticket counts (exclude host)
     return Object.entries(game.players)
-      .filter(([id, player]) => id !== game.host && player.name !== currentPlayer.name)
-      .map(([_, player]) => player.name);
+      .filter(([socketId, player]) => socketId !== game.host)
+      .map(([_, player]) => ({
+        name: player.name,
+        ticketCount: player.tickets.length
+      }));
   }
 }
 

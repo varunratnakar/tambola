@@ -1,8 +1,13 @@
-// Generates a 3x9 Tambola ticket according to basic rules
-// For simplicity, this implementation ensures each column has at most 3 numbers and each row has exactly 5 numbers, totalling 15.
+// Generates a 3x9 Tambola ticket according to official rules
+// Rules:
+// - 3 rows × 9 columns grid
+// - Exactly 15 numbers (unique, ranging from 1-90)
+// - No row has more than 5 numbers
+// - No column is empty
+// - Numbers in every column are in ascending order from top to bottom
+// - Column ranges: 1-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80-90
 
 function generateTicket() {
-  const columns = Array.from({ length: 9 }, () => []);
   const ranges = [
     [1, 9],
     [10, 19],
@@ -15,54 +20,70 @@ function generateTicket() {
     [80, 90],
   ];
 
-  // Fill columns with numbers respecting column ranges
+  // Initialize empty 3x9 grid
+  const ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
+  
+  // Step 1: Determine which columns will have numbers for each row
+  // We need exactly 5 numbers per row (15 total) and no column can be empty
+  
+  // Create a distribution pattern: each row gets 5 columns, ensuring all 9 columns are used
+  const rowColumnAssignments = [[], [], []]; // Which columns each row will use
+  
+  // Start by ensuring each column appears at least once
+  const availableColumns = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  shuffle(availableColumns);
+  
+  // Assign one column to each row first (9 columns, 3 rows, so 3 columns per row minimum)
+  for (let row = 0; row < 3; row++) {
+    for (let i = 0; i < 3; i++) {
+      rowColumnAssignments[row].push(availableColumns[row * 3 + i]);
+    }
+  }
+  
+  // Now we need to assign 6 more column slots (2 per row) to reach 5 per row
+  // Randomly distribute the remaining slots
+  const remainingSlots = [];
+  for (let col = 0; col < 9; col++) {
+    remainingSlots.push(col, col); // Each column can appear in up to 2 additional rows
+  }
+  shuffle(remainingSlots);
+  
+  // Assign 2 more columns to each row
+  for (let row = 0; row < 3; row++) {
+    let assigned = 0;
+    for (let i = 0; i < remainingSlots.length && assigned < 2; i++) {
+      const col = remainingSlots[i];
+      if (!rowColumnAssignments[row].includes(col)) {
+        rowColumnAssignments[row].push(col);
+        assigned++;
+        remainingSlots.splice(i, 1); // Remove this slot
+        i--; // Adjust index after removal
+      }
+    }
+  }
+  
+  // Step 2: Generate numbers for each column and place them
   for (let col = 0; col < 9; col++) {
     const [min, max] = ranges[col];
-    const count = Math.floor(Math.random() * 3) + 1; // 1 to 3 numbers per column
-    const numbers = shuffle(range(min, max)).slice(0, count).sort((a, b) => a - b);
-    columns[col] = numbers;
+    const availableNumbers = shuffle(range(min, max));
+    
+    // Find which rows will have numbers in this column
+    const rowsForThisColumn = [];
+    for (let row = 0; row < 3; row++) {
+      if (rowColumnAssignments[row].includes(col)) {
+        rowsForThisColumn.push(row);
+      }
+    }
+    
+    // Assign numbers to these rows in ascending order
+    const numbersForColumn = availableNumbers.slice(0, rowsForThisColumn.length).sort((a, b) => a - b);
+    
+    rowsForThisColumn.forEach((row, index) => {
+      ticket[row][col] = numbersForColumn[index];
+    });
   }
 
-  // Now build rows: 3 rows, each should have 5 numbers
-  const rows = Array.from({ length: 3 }, () => Array(9).fill(null));
-  // Place numbers column-wise top-down
-  columns.forEach((colNumbers, colIndex) => {
-    colNumbers.forEach((num, idx) => {
-      rows[idx][colIndex] = num;
-    });
-  });
-
-  // Ensure each row has 5 numbers: if less, move numbers from rows with >5
-  rows.forEach((row, rowIndex) => {
-    let numbersInRow = row.filter(Boolean).length;
-    while (numbersInRow > 5) {
-      // remove a random number from this row and push to another row with <5
-      const numIndices = row.map((v, i) => (v ? i : -1)).filter((i) => i !== -1);
-      const removeIdx = numIndices[Math.floor(Math.random() * numIndices.length)];
-      const num = row[removeIdx];
-      // find target row with <5
-      const targetRowIndex = rows.findIndex((r) => r.filter(Boolean).length < 5);
-      if (targetRowIndex === -1) break;
-      row[removeIdx] = null;
-      rows[targetRowIndex][removeIdx] = num;
-      numbersInRow = row.filter(Boolean).length;
-    }
-  });
-
-  // If some rows still less than 5, redistribute
-  rows.forEach((row) => {
-    while (row.filter(Boolean).length < 5) {
-      // pick a column with an empty cell in this row and number in another row
-      const colIndex = row.findIndex((cell, i) => cell === null && rows.some((r) => r[i] && r !== row));
-      if (colIndex === -1) break;
-      const donorRow = rows.find((r) => r[colIndex] && r.filter(Boolean).length > 5);
-      if (!donorRow) break;
-      row[colIndex] = donorRow[colIndex];
-      donorRow[colIndex] = null;
-    }
-  });
-
-  return rows;
+  return ticket;
 }
 
 function range(start, end) {
