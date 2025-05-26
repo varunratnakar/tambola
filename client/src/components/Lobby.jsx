@@ -15,7 +15,8 @@ function Lobby({ onStart }) {
     enableEarly5: false,
     enableMultipleHouses: false,
     maxHouseWinners: 3,
-    houseReductionPercent: 50
+    houseReductionPercent: 50,
+    autoDrawInterval: 15 // Default 15 seconds
   });
   
   // Prize tracking
@@ -83,24 +84,16 @@ function Lobby({ onStart }) {
       });
 
       // Handle disconnection notifications
-      socketRef.current.on('host_disconnected', ({ reason, gameWillEndIn }) => {
-        if (gameWillEndIn > 0) {
-          alert(`⚠️ ${reason}. Game will end in ${Math.round(gameWillEndIn / 60000)} minutes if host doesn't reconnect.`);
-        } else {
-          alert(`⚠️ ${reason}. Game has been cancelled.`);
-        }
-      });
-
       socketRef.current.on('player_disconnected', ({ playerName }) => {
         console.log(`Player ${playerName} disconnected`);
       });
 
-      socketRef.current.on('host_reconnected', ({ hostName }) => {
-        alert(`✅ Host ${hostName} has reconnected! Game continues.`);
-      });
-
       socketRef.current.on('player_reconnected', ({ playerName }) => {
         console.log(`Player ${playerName} reconnected`);
+      });
+
+      socketRef.current.on('host_left', ({ message }) => {
+        alert(`ℹ️ ${message}`);
       });
 
       // Handle connection status
@@ -145,6 +138,11 @@ function Lobby({ onStart }) {
   };
 
   const handleCreateGame = () => {
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     connect();
@@ -157,8 +155,9 @@ function Lobby({ onStart }) {
       attempts++;
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit('create_game', { 
+          hostName: playerName,
           pricePerTicket, 
-          numTickets: 1, // Host gets 1 ticket by default
+          numTickets: numTickets,
           gameOptions
         }, (res) => {
           setLoading(false);
@@ -326,6 +325,19 @@ function Lobby({ onStart }) {
         <div className="space-y-4">
           <div>
             <label className="block text-purple-800 font-bold text-sm mb-2">
+              👤 Your name (required):
+            </label>
+            <input
+              className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
+              placeholder="Enter your name"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              maxLength={20}
+            />
+          </div>
+
+          <div>
+            <label className="block text-purple-800 font-bold text-sm mb-2">
               💰 Price per ticket
             </label>
             <input
@@ -337,45 +349,21 @@ function Lobby({ onStart }) {
             />
           </div>
 
-          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-            <h3 className="font-bold text-yellow-800 mb-3">🏆 Prize Distribution</h3>
-            <div className="space-y-2 text-sm">
-              <div className="text-center text-yellow-700 mb-2 italic">
-                Prizes calculated automatically from ticket sales
-              </div>
-              <div className="flex justify-between">
-                <span>🔥 Top Line:</span>
-                <span className="font-bold">15% of total</span>
-              </div>
-              <div className="flex justify-between">
-                <span>⭐ Middle Line:</span>
-                <span className="font-bold">15% of total</span>
-              </div>
-              <div className="flex justify-between">
-                <span>💫 Bottom Line:</span>
-                <span className="font-bold">15% of total</span>
-              </div>
-              <div className="flex justify-between">
-                <span>🔸 Corners:</span>
-                <span className="font-bold">10% of total</span>
-              </div>
-              <div className="flex justify-between">
-                <span>🎉 Full House:</span>
-                <span className="font-bold">{gameOptions.enableEarly5 ? '35%' : '40%'} of total</span>
-              </div>
-              {gameOptions.enableEarly5 && (
-                <div className="flex justify-between">
-                  <span>⚡ Early 5:</span>
-                  <span className="font-bold">5% of total</span>
-                </div>
-              )}
-              <div className="border-t border-yellow-400 pt-2 mt-2">
-                <div className="flex justify-between text-xs text-yellow-600">
-                  <span>Host Commission:</span>
-                  <span>5% of total</span>
-                </div>
-              </div>
-            </div>
+          <div>
+            <label className="block text-purple-800 font-bold text-sm mb-2">
+              🎫 Number of tickets for you (1-6):
+            </label>
+            <select
+              className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
+              value={numTickets}
+              onChange={(e) => setNumTickets(parseInt(e.target.value))}
+            >
+              {[1, 2, 3, 4, 5, 6].map(num => (
+                <option key={num} value={num}>
+                  {num} ticket{num > 1 ? 's' : ''} - ₹{num * pricePerTicket}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Game Options */}
@@ -432,6 +420,23 @@ function Lobby({ onStart }) {
                   </div>
                 </>
               )}
+              
+              <div className="flex items-center justify-between">
+                <span>Auto-Draw Interval:</span>
+                <select
+                  className="border border-blue-400 rounded px-2 py-1"
+                  value={gameOptions.autoDrawInterval}
+                  onChange={(e) => setGameOptions({...gameOptions, autoDrawInterval: parseInt(e.target.value)})}
+                >
+                  <option value={5}>5 seconds (Fast)</option>
+                  <option value={10}>10 seconds</option>
+                  <option value={15}>15 seconds (Default)</option>
+                  <option value={20}>20 seconds</option>
+                  <option value={30}>30 seconds</option>
+                  <option value={45}>45 seconds</option>
+                  <option value={60}>1 minute (Slow)</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -441,10 +446,51 @@ function Lobby({ onStart }) {
         <button 
           className="btn-primary w-full"
           onClick={handleCreateGame}
-          disabled={loading}
         >
           {loading ? '⏳ Creating...' : '🎮 Create & Get Code'}
         </button>
+
+
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+          <h3 className="font-bold text-yellow-800 mb-3">🏆 Prize Distribution</h3>
+          <div className="space-y-2 text-sm">
+            <div className="text-center text-yellow-700 mb-2 italic">
+              Prizes calculated automatically from ticket sales
+            </div>
+            <div className="flex justify-between">
+              <span>🔥 Top Line:</span>
+              <span className="font-bold">15% of total</span>
+            </div>
+            <div className="flex justify-between">
+              <span>⭐ Middle Line:</span>
+              <span className="font-bold">15% of total</span>
+            </div>
+            <div className="flex justify-between">
+              <span>💫 Bottom Line:</span>
+              <span className="font-bold">15% of total</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🔸 Corners:</span>
+              <span className="font-bold">10% of total</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🎉 Full House:</span>
+              <span className="font-bold">{gameOptions.enableEarly5 ? '35%' : '40%'} of total</span>
+            </div>
+            {gameOptions.enableEarly5 && (
+              <div className="flex justify-between">
+                <span>⚡ Early 5:</span>
+                <span className="font-bold">5% of total</span>
+              </div>
+            )}
+            <div className="border-t border-yellow-400 pt-2 mt-2">
+              <div className="flex justify-between text-xs text-yellow-600">
+                <span>Host Commission:</span>
+                <span>5% of total</span>
+              </div>
+            </div>
+          </div>
+        </div>        
       </div>
     );
   }
@@ -531,7 +577,46 @@ function Lobby({ onStart }) {
           <h2 className="text-2xl font-extrabold text-purple-800" style={{ fontFamily: 'Fredoka One' }}>
             Game Details
           </h2>
-            </div>
+        </div>
+
+        <div>
+          <label className="block text-purple-800 font-bold text-sm mb-2">
+            👤 Your name (required):
+          </label>
+          <input
+            className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
+            placeholder="Enter your name"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            maxLength={20}
+          />
+        </div>
+
+        <div>
+          <label className="block text-purple-800 font-bold text-sm mb-2">
+            Number of tickets (1-6):
+          </label>
+          <select
+            className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
+            value={numTickets}
+            onChange={(e) => setNumTickets(parseInt(e.target.value))}
+          >
+            {[1, 2, 3, 4, 5, 6].map(num => (
+              <option key={num} value={num}>
+                {num} ticket{num > 1 ? 's' : ''} - ₹{num * gameDetails.pricePerTicket}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {error && <p className="text-red-600 text-center font-bold">{error}</p>}
+
+        <button
+          className="btn-primary w-full"
+          onClick={handleJoinGame}
+        >
+          {loading ? '⏳ Joining...' : `🚀 Join Game - ₹${numTickets * gameDetails.pricePerTicket}`}
+        </button>
 
         <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
           <h3 className="font-bold text-blue-800 mb-3">💰 Game Info</h3>
@@ -546,6 +631,40 @@ function Lobby({ onStart }) {
             </div>
             </div>
           </div>
+
+
+        {/* Game Options Display */}
+        {(gameDetails.options?.enableEarly5 || gameDetails.options?.enableMultipleHouses || gameDetails.options?.autoDrawInterval) && (
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+            <h3 className="font-bold text-blue-800 mb-3">⚙️ Game Features</h3>
+            <div className="space-y-1 text-sm">
+              {gameDetails.options.enableEarly5 && (
+                <div className="flex items-center">
+                  <span className="text-green-600">✓</span>
+                  <span className="ml-2">Early 5 enabled</span>
+                </div>
+              )}
+              {gameDetails.options.enableMultipleHouses && (
+                <div className="flex items-center">
+                  <span className="text-green-600">✓</span>
+                  <span className="ml-2">
+                    Multiple Full Houses (max {gameDetails.options.maxHouseWinners}, 
+                    {gameDetails.options.houseReductionPercent}% reduction)
+                  </span>
+                </div>
+              )}
+              {gameDetails.options.autoDrawInterval && (
+                <div className="flex items-center">
+                  <span className="text-blue-600">⏰</span>
+                  <span className="ml-2">
+                    Auto-draw every {gameDetails.options.autoDrawInterval} seconds
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
 
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
           <h3 className="font-bold text-yellow-800 mb-3">🏆 Current Prize Pool</h3>
@@ -588,69 +707,6 @@ function Lobby({ onStart }) {
           </div>
         </div>
 
-        {/* Game Options Display */}
-        {(gameDetails.options?.enableEarly5 || gameDetails.options?.enableMultipleHouses) && (
-          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
-            <h3 className="font-bold text-blue-800 mb-3">⚙️ Game Features</h3>
-            <div className="space-y-1 text-sm">
-              {gameDetails.options.enableEarly5 && (
-                <div className="flex items-center">
-                  <span className="text-green-600">✓</span>
-                  <span className="ml-2">Early 5 enabled</span>
-                </div>
-              )}
-              {gameDetails.options.enableMultipleHouses && (
-                <div className="flex items-center">
-                  <span className="text-green-600">✓</span>
-                  <span className="ml-2">
-                    Multiple Full Houses (max {gameDetails.options.maxHouseWinners}, 
-                    {gameDetails.options.houseReductionPercent}% reduction)
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-purple-800 font-bold text-sm mb-2">
-            👤 Your name (required):
-          </label>
-          <input
-            className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            maxLength={20}
-          />
-        </div>
-
-        <div>
-          <label className="block text-purple-800 font-bold text-sm mb-2">
-            Number of tickets (1-6):
-          </label>
-          <select
-            className="w-full border-2 border-purple-400 rounded-md p-3 font-bold"
-            value={numTickets}
-            onChange={(e) => setNumTickets(parseInt(e.target.value))}
-          >
-            {[1, 2, 3, 4, 5, 6].map(num => (
-              <option key={num} value={num}>
-                {num} ticket{num > 1 ? 's' : ''} - ₹{num * gameDetails.pricePerTicket}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {error && <p className="text-red-600 text-center font-bold">{error}</p>}
-
-        <button
-          className="btn-primary w-full"
-          onClick={handleJoinGame}
-          disabled={loading}
-        >
-          {loading ? '⏳ Joining...' : `🚀 Join Game - ₹${numTickets * gameDetails.pricePerTicket}`}
-        </button>
       </div>
     );
   }
@@ -720,7 +776,10 @@ function Lobby({ onStart }) {
           <div className="space-y-2">
             {players.map((player, idx) => (
               <div key={idx} className="flex justify-between items-center bg-purple-100 rounded-lg px-3 py-2">
-                <span className="font-medium">{player.name}</span>
+                <span className="font-medium">
+                  {player.name}
+                  {player.isHost && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">HOST</span>}
+                </span>
                 <span className="text-sm bg-purple-200 px-2 py-1 rounded-full">
                   {player.ticketCount} ticket{player.ticketCount > 1 ? 's' : ''}
                 </span>

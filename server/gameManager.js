@@ -7,7 +7,7 @@ class GameManager {
     this.playerGameMap = new Map(); // socketId -> gameId
   }
 
-  createGame(hostSocketId, pricePerTicket = 50, prizes = {}, numTickets = 1, gameOptions = {}) {
+  createGame(hostSocketId, hostName, pricePerTicket = 50, numTickets = 1, gameOptions = {}) {
     // Generate 3-letter game ID
     const generateGameId = () => {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -23,6 +23,7 @@ class GameManager {
     do {
       gameId = generateGameId();
     } while (this.games.has(gameId));
+    
     const game = {
       id: gameId,
       host: hostSocketId,
@@ -53,19 +54,38 @@ class GameManager {
         enableMultipleHouses: gameOptions.enableMultipleHouses || false,
         maxHouseWinners: gameOptions.maxHouseWinners || 3,
         houseReductionPercent: gameOptions.houseReductionPercent || 50, // Each subsequent house gets 50% of previous
+        autoDrawInterval: gameOptions.autoDrawInterval || 15, // Default 15 seconds
       },
+      // Auto-draw settings
+      autoDrawEnabled: false,
+      autoDrawInterval: 10, // Default 10 seconds
+      autoDrawTimer: null,
     };
-    // Host doesn't get tickets - they just manage the game
+
+    // Host now gets tickets like any other player
+    const hostTickets = generateTickets(Math.min(numTickets, 6));
     game.players[hostSocketId] = {
-      name: 'Host',
-      tickets: [], // Host has no tickets
+      name: hostName,
+      tickets: hostTickets,
       status: {},
+      isHost: true, // Mark as host for special privileges
+      disconnected: false,
     };
+
+    // Update total tickets sold and calculate initial prizes
+    game.totalTicketsSold = numTickets;
+    this.calculatePrizes(game);
 
     this.games.set(gameId, game);
     this.playerGameMap.set(hostSocketId, gameId);
-    // Return empty players list and no tickets for host
-    return { gameId, tickets: [], players: [] };
+    
+    // Return tickets and initial player list for host
+    const players = [{
+      name: hostName,
+      ticketCount: hostTickets.length
+    }];
+    
+    return { gameId, tickets: hostTickets, players };
   }
 
   joinGame(gameId, socketId, playerName, numTickets = 1) {
@@ -91,10 +111,11 @@ class GameManager {
         
         // Return existing tickets and players (no need to recalculate prizes for reconnection)
         const players = Object.entries(game.players)
-          .filter(([socketId, player]) => socketId !== game.host && !player.disconnected)
+          .filter(([socketId, player]) => !player.disconnected)
           .map(([_, player]) => ({
             name: player.name,
-            ticketCount: player.tickets.length
+            ticketCount: player.tickets.length,
+            isHost: player.isHost || false
           }));
         return { tickets: existingPlayer.tickets, players, reconnected: true, wasHost: oldSocketId === game.host };
       }
@@ -117,12 +138,13 @@ class GameManager {
     game.totalTicketsSold += numTickets;
     this.calculatePrizes(game);
     
-    // Return players with ticket counts (exclude host and disconnected players)
+    // Return players with ticket counts (exclude disconnected players)
     const players = Object.entries(game.players)
-      .filter(([socketId, player]) => socketId !== game.host && !player.disconnected)
+      .filter(([socketId, player]) => !player.disconnected)
       .map(([_, player]) => ({
         name: player.name,
-        ticketCount: player.tickets.length
+        ticketCount: player.tickets.length,
+        isHost: player.isHost || false
       }));
     return { tickets, players };
   }
@@ -132,6 +154,13 @@ class GameManager {
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
+    
+    // Auto-start number drawing after 5 seconds using host's chosen interval
+    setTimeout(() => {
+      const game = this.games.get(gameId);
+      const interval = game?.options?.autoDrawInterval || 15;
+      this.startAutoDraw(gameId, interval);
+    }, 5000);
   }
 
   cancelGame(gameId, socketId) {
@@ -147,10 +176,10 @@ class GameManager {
     });
   }
 
-  drawNumber(gameId, socketId, chosenNumber = null) {
+  drawNumber(gameId, socketId = null, chosenNumber = null) {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
-    if (socketId !== game.host) throw new Error('Only host can draw numbers');
+    // Remove host-only restriction - anyone can draw (but this will mainly be server-called)
     if (!game.started) throw new Error('Game not started');
     if (game.remainingNumbers.length === 0) throw new Error('All numbers drawn');
 
@@ -167,11 +196,6 @@ class GameManager {
       number = game.remainingNumbers.splice(idx, 1)[0];
     }
     game.drawnNumbers.push(number);
-    
-    // Check if game is complete (all numbers drawn)
-    if (game.remainingNumbers.length === 0) {
-      this.endGame(gameId, 'All numbers have been drawn!');
-    }
     
     return number;
   }
@@ -364,7 +388,24 @@ class GameManager {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) return false;
 
-    // Check if all prizes are claimed
+    // Check 1: No more active players left
+    const activePlayers = Object.values(game.players).filter(player => !player.disconnected);
+    if (activePlayers.length === 0) {
+      console.log(`Game ${gameId} ending: No players remaining`);
+      this.stopAutoDraw(gameId);
+      this.endGame(gameId, 'Game ended - no players remaining');
+      return true;
+    }
+
+    // Check 2: No more numbers left to draw
+    if (game.remainingNumbers.length === 0) {
+      console.log(`Game ${gameId} ending: All numbers drawn (${game.drawnNumbers.length}/90)`);
+      this.stopAutoDraw(gameId);
+      this.endGame(gameId, 'Game completed - all numbers have been drawn!');
+      return true;
+    }
+
+    // Check 3: All prizes are claimed
     const allPrizesClaimed = 
       game.winners.topLine && 
       game.winners.middleLine && 
@@ -376,10 +417,87 @@ class GameManager {
         game.winners.house.length > 0);
 
     if (allPrizesClaimed) {
-      this.endGame(gameId, 'All prizes have been claimed!');
+      console.log(`Game ${gameId} ending: All prizes claimed`);
+      this.stopAutoDraw(gameId);
+      this.endGame(gameId, 'Game completed - all prizes have been claimed!');
       return true;
     }
+    
     return false;
+  }
+
+  // Auto-draw functionality - now server-managed
+  startAutoDraw(gameId, interval = 15) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game || !game.started) return false;
+
+    // Clear any existing timer
+    this.stopAutoDraw(gameId);
+
+    game.autoDrawEnabled = true;
+    game.autoDrawInterval = interval;
+    
+    console.log(`Starting auto-draw for game ${gameId} with ${interval}s interval`);
+    
+    // Start the auto-draw timer
+    game.autoDrawTimer = setInterval(() => {
+      const drawnNumber = this.drawNextNumber(gameId);
+      if (drawnNumber) {
+        // console.log(`Auto-drew number ${drawnNumber} for game ${gameId}`);
+        this.io.to(gameId).emit('number_drawn', { 
+          number: drawnNumber, 
+          drawnNumbers: game.drawnNumbers,
+          remainingCount: game.remainingNumbers.length,
+          autoDrawn: true
+        });
+      }
+    }, interval * 1000);
+
+    // Notify players that auto-draw started
+    this.io.to(gameId).emit('auto_draw_started', { interval });
+    return true;
+  }
+
+  stopAutoDraw(gameId) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game) return false;
+
+    game.autoDrawEnabled = false;
+    if (game.autoDrawTimer) {
+      clearInterval(game.autoDrawTimer);
+      game.autoDrawTimer = null;
+    }
+    return true;
+  }
+
+  drawNextNumber(gameId) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game || !game.started) {
+      this.stopAutoDraw(gameId);
+      return null;
+    }
+
+    // Check if game should end before drawing
+    if (this.checkGameCompletion(gameId)) {
+      return null;
+    }
+
+    // If no numbers left, game completion check above will handle it
+    if (game.remainingNumbers.length === 0) {
+      return null;
+    }
+
+    // Draw a random number
+    const randomIndex = Math.floor(Math.random() * game.remainingNumbers.length);
+    const drawnNumber = game.remainingNumbers.splice(randomIndex, 1)[0];
+    game.drawnNumbers.push(drawnNumber);
+
+    // Check if game should end after drawing (e.g., if this was the last number)
+    setTimeout(() => {
+      this.checkGameCompletion(gameId);
+    }, 100); // Small delay to allow the number to be processed
+
+    return drawnNumber;
   }
 
   removePlayer(socketId) {
@@ -398,52 +516,48 @@ class GameManager {
     this.playerGameMap.delete(socketId);
     this.io.to(gameId).emit('player_left', { playerId: socketId });
 
-    // Handle host disconnection
+    // Check if game should end due to no remaining players
+    if (game.started) {
+      this.checkGameCompletion(gameId);
+    }
+
+    // Handle host disconnection - game continues without host
     if (socketId === game.host) {
       if (!game.started) {
         // Host left before game started - cancel immediately
         this.games.delete(gameId);
-        this.io.to(gameId).emit('game_cancelled', { reason: 'Host left the game' });
+        this.io.to(gameId).emit('game_cancelled', { reason: 'Host left before game started' });
         // Clean up all player mappings
         Object.keys(game.players).forEach(playerId => {
           this.playerGameMap.delete(playerId);
         });
       } else {
-        // Host left during game - keep game running for 10 minutes
-        game.hostDisconnectedAt = Date.now();
-        
-        // Set a timer to end the game if host doesn't reconnect
-        setTimeout(() => {
-          const currentGame = this.games.get(gameId);
-          if (currentGame && currentGame.players[socketId]?.disconnected) {
-      this.games.delete(gameId);
-            this.io.to(gameId).emit('game_cancelled', { 
-              reason: 'Host disconnected for too long (10 minutes)' 
-            });
-            // Clean up all player mappings
-            Object.keys(currentGame.players).forEach(playerId => {
-              this.playerGameMap.delete(playerId);
-            });
-          }
-        }, 10 * 60 * 1000); // 10 minutes
+        // Host left during game - game continues automatically
+        console.log(`Host left game ${gameId}, but game continues with server management`);
+        this.io.to(gameId).emit('host_left', { 
+          message: 'Host has left the game, but the game continues automatically!' 
+        });
+        // No need to set timers - game runs independently now
       }
     }
     
-    // Clean up completely disconnected games after 30 minutes
+    // Clean up completely disconnected games after 10 minutes
     setTimeout(() => {
       const currentGame = this.games.get(gameId);
       if (currentGame) {
         const allDisconnected = Object.values(currentGame.players).every(player => 
-          player.disconnected && (Date.now() - player.disconnectedAt) > 5 * 60 * 1000
+          player.disconnected && (Date.now() - player.disconnectedAt) > 2 * 60 * 1000 // 2 minutes
         );
         if (allDisconnected) {
+          console.log(`Cleaning up abandoned game ${gameId} - all players disconnected`);
+          this.stopAutoDraw(gameId);
           this.games.delete(gameId);
           Object.keys(currentGame.players).forEach(playerId => {
             this.playerGameMap.delete(playerId);
           });
         }
       }
-    }, 30 * 60 * 1000); // 30 minutes
+    }, 10 * 60 * 1000); // 10 minutes
   }
 
   getGame(gameId) {
@@ -455,9 +569,9 @@ class GameManager {
     if (!game) throw new Error('Invalid game ID');
     if (game.started) throw new Error('Game already started');
     
-    // Count players excluding the host and disconnected players
+    // Count all connected players (including host since host is now also a player)
     const playerCount = Object.entries(game.players)
-      .filter(([socketId, player]) => socketId !== game.host && !player.disconnected)
+      .filter(([socketId, player]) => !player.disconnected)
       .length;
     
     return {
@@ -474,12 +588,13 @@ class GameManager {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) return [];
     
-    // Return all players with ticket counts (exclude host and disconnected players)
+    // Return all connected players with ticket counts (including host since host is now also a player)
     return Object.entries(game.players)
-      .filter(([socketId, player]) => socketId !== game.host && !player.disconnected)
-      .map(([_, player]) => ({
+      .filter(([socketId, player]) => !player.disconnected)
+      .map(([playerId, player]) => ({
         name: player.name,
-        ticketCount: player.tickets.length
+        ticketCount: player.tickets.length,
+        isHost: playerId === game.host
       }));
   }
 }

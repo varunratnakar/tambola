@@ -50,9 +50,9 @@ io.on('connection', (socket) => {
     // Client is alive, reset any disconnect timers
   });
 
-  socket.on('create_game', ({ pricePerTicket, numTickets = 1, gameOptions = {} }, cb) => {
+  socket.on('create_game', ({ hostName, pricePerTicket, numTickets = 1, gameOptions = {} }, cb) => {
     try {
-      const { gameId, tickets, players } = gameManager.createGame(socket.id, pricePerTicket, {}, numTickets, gameOptions);
+      const { gameId, tickets, players } = gameManager.createGame(socket.id, hostName, pricePerTicket, numTickets, gameOptions);
       socket.join(gameId);
       cb({ status: 'ok', gameId, tickets, players });
     } catch (err) {
@@ -180,15 +180,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('draw_number', ({ gameId, number: chosenNumber }, cb) => {
-    try {
-      const number = gameManager.drawNumber(gameId, socket.id, chosenNumber);
-      io.to(gameId).emit('number_drawn', { number });
-      cb({ status: 'ok', number });
-    } catch (err) {
-      cb({ status: 'error', message: err.message });
-    }
-  });
+  // Remove manual draw endpoints - game is now fully automated
+  // socket.on('draw_number') - removed
+  // socket.on('start_auto_draw') - removed  
+  // socket.on('stop_auto_draw') - removed
 
   socket.on('claim', ({ gameId, claimType, lines }, cb) => {
     // claimType: 'line', 'corners', 'early5', or 'house'
