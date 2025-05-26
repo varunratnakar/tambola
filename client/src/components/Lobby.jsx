@@ -331,10 +331,10 @@ function Lobby({ onStart }) {
 
         <input
           className="w-full border-2 border-blue-400 rounded-md p-3 font-bold text-center text-2xl"
-          placeholder="Enter game code"
+          placeholder="Enter 3-letter code"
           value={gameCode}
-          onChange={(e) => setGameCode(e.target.value.toUpperCase())}
-          maxLength={6}
+          onChange={(e) => setGameCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+          maxLength={3}
         />
 
         {error && <p className="text-red-600 text-center font-bold">{error}</p>}

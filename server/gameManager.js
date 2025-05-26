@@ -1,5 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
-const { generateTicket, generateTickets } = require('./ticket');
+const { generateTicket } = require('./ticket');
 
 class GameManager {
   constructor(io) {
@@ -9,7 +8,21 @@ class GameManager {
   }
 
   createGame(hostSocketId, pricePerTicket = 50, prizes = {}, numTickets = 1) {
-    const gameId = uuidv4().slice(0, 6);
+    // Generate 3-letter game ID
+    const generateGameId = () => {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let result = '';
+      for (let i = 0; i < 3; i++) {
+        result += letters.charAt(Math.floor(Math.random() * letters.length));
+      }
+      return result;
+    };
+    
+    // Ensure unique game ID
+    let gameId;
+    do {
+      gameId = generateGameId();
+    } while (this.games.has(gameId));
     const game = {
       id: gameId,
       host: hostSocketId,
@@ -80,7 +93,10 @@ class GameManager {
     
     if (game.started) throw new Error('Game already started');
 
-    const tickets = generateTickets(Math.min(numTickets, 6));
+    const tickets = [];
+    for (let i = 0; i < Math.min(numTickets, 6); i++) { // Max 6 tickets per player
+      tickets.push(generateTicket());
+    }
     
     game.players[socketId] = {
       name: playerName,
@@ -288,7 +304,7 @@ class GameManager {
         setTimeout(() => {
           const currentGame = this.games.get(gameId);
           if (currentGame && currentGame.players[socketId]?.disconnected) {
-            this.games.delete(gameId);
+      this.games.delete(gameId);
             this.io.to(gameId).emit('game_cancelled', { 
               reason: 'Host disconnected for too long (10 minutes)' 
             });
