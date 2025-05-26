@@ -382,7 +382,7 @@ function Lobby({ onStart }) {
         <button
           className="btn-primary w-full"
           onClick={handleJoinGame}
-          disabled={loading || !playerName.trim()}
+          disabled={loading}
         >
           {loading ? '⏳ Joining...' : `🚀 Join Game - ₹${numTickets * gameDetails.pricePerTicket}`}
         </button>

@@ -84,41 +84,97 @@ function TicketGrid({ ticket, marked, onCell, latestNumber, ticketIndex, totalTi
   );
 }
 
-function AllTicketsView({ tickets, marked, onCell, latestNumber }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, drawn, gamePrizes, winners, handleClaim }) {
   if (!tickets || tickets.length === 0) return null;
 
   return (
-    <div className="all-tickets-container">
-      {tickets.length === 1 ? (
-        // Single ticket - full width
-        <div className="single-ticket-view">
-          <TicketGrid
-            ticket={tickets[0]}
-            marked={marked[0] || []}
-            onCell={(num) => onCell(num, 0)}
-            latestNumber={latestNumber}
-            ticketIndex={0}
-            totalTickets={1}
-          />
+    <div className="player-game-container">
+
+      {/* Tickets Grid */}
+      <div className="tickets-section">
+        <div className="tickets-container-new">
+          {tickets.map((ticket, index) => (
+            <div key={index} className="ticket-wrapper">
+              <div className="ticket-header">
+                <span className="ticket-number">Ticket {index + 1}</span>
+                {latestNumber && (
+                  <span className="ticket-latest-number">{latestNumber}</span>
+                )}
+                {drawn.length > 0 && (
+                  <span className="ticket-recent-numbers">
+                    {drawn.slice(-5).join(' ')}
+                  </span>
+                )}
+              </div>
+              <div className="ticket-grid-new">
+                {ticket.map((row, rowIdx) => (
+                  <div key={rowIdx} className="ticket-row">
+                    {row.map((num, colIdx) => (
+                      <div
+                        key={colIdx}
+                        onClick={() => num && onCell(num, index)}
+                        className={`ticket-cell ${!num ? 'empty-cell' : marked[index]?.includes(num) ? 'marked-cell' : 'number-cell'}`}
+                      >
+                        {num || ''}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-      ) : (
-        // Multiple tickets - grid layout
-        <div className="multiple-tickets-view">
-          <div className="tickets-grid">
-            {tickets.map((ticket, index) => (
-              <TicketGrid
-                key={index}
-                ticket={ticket}
-                marked={marked[index] || []}
-                onCell={(num) => onCell(num, index)}
-                latestNumber={latestNumber}
-                ticketIndex={index}
-                totalTickets={tickets.length}
-              />
-            ))}
-          </div>
+      </div>
+
+      {/* Prize Claim Buttons */}
+      <div className="prize-section">
+        <div className="prize-buttons-grid">
+          <button 
+            className={`prize-btn line-btn ${winners.topLine ? 'claimed' : ''}`}
+            onClick={() => handleClaim('line', 0)}
+            disabled={!!winners.topLine}
+          >
+            <div className="prize-text">Top Line</div>
+            <div className="prize-amount">₹{gamePrizes.topLine}</div>
+          </button>
+          
+          <button 
+            className={`prize-btn line-btn ${winners.middleLine ? 'claimed' : ''}`}
+            onClick={() => handleClaim('line', 1)}
+            disabled={!!winners.middleLine}
+          >
+            <div className="prize-text">Middle Line</div>
+            <div className="prize-amount">₹{gamePrizes.middleLine}</div>
+          </button>
+          
+          <button 
+            className={`prize-btn line-btn ${winners.bottomLine ? 'claimed' : ''}`}
+            onClick={() => handleClaim('line', 2)}
+            disabled={!!winners.bottomLine}
+          >
+            <div className="prize-text">Bottom Line</div>
+            <div className="prize-amount">₹{gamePrizes.bottomLine}</div>
+          </button>
+          
+          <button 
+            className={`prize-btn special-btn ${winners.corners ? 'claimed' : ''}`}
+            onClick={() => handleClaim('corners')}
+            disabled={!!winners.corners}
+          >
+            <div className="prize-text">Corners</div>
+            <div className="prize-amount">₹{gamePrizes.corners}</div>
+          </button>
+          
+          <button 
+            className={`prize-btn house-btn ${winners.house ? 'claimed' : ''}`}
+            onClick={() => handleClaim('house')}
+            disabled={!!winners.house}
+          >
+            <div className="prize-text">Full House</div>
+            <div className="prize-amount">₹{gamePrizes.house}</div>
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -403,12 +459,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
         </div>
       )}
 
-      {/* Game not started notification for players */}
-      {!isHost && !gameStarted && !gameCompleted && !gameCancelled && (
-        <div className="bg-blue-100 border-2 border-blue-400 rounded-lg p-3 text-center">
-          <p className="text-blue-800 font-bold">⏳ Waiting for host to draw the first number...</p>
-        </div>
-      )}
+
 
       {/* My Winnings Display - Only show when game is completed */}
       {!isHost && gameCompleted && (
@@ -550,166 +601,23 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               </div>
             </>
           ) : (
-            (() => {
-              console.log('Render check:', { tickets, ticketsLength: tickets?.length, gameCompleted, isHost });
-              return !isHost && tickets && tickets.length > 0 && !gameCompleted;
-            })() && (
-              <>
-                {/* Portrait layout - stacked */}
-                <div className="block landscape:hidden">
-                  <AllTicketsView
-                    tickets={tickets}
-                    marked={marked}
-                    onCell={toggleMark}
-                    latestNumber={latest}
-                  />
-                  
-                  {/* Claim buttons - below tickets */}
-                  <div className="mt-4 px-2">
-                    <div className="bg-white border-2 border-purple-400 rounded-lg p-3 shadow-lg">
-                      <h3 className="text-center font-bold text-purple-800 mb-3 text-sm">
-                        🏆 Claim Prize 🏆
-                      </h3>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.topLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 0)}
-                          disabled={!!winners.topLine}
-                        >
-                          <div className="text-center">
-                            <div>🔥 Top</div>
-                            <div className="text-xs">₹{gamePrizes.topLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.middleLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 1)}
-                          disabled={!!winners.middleLine}
-                        >
-                          <div className="text-center">
-                            <div>⭐ Mid</div>
-                            <div className="text-xs">₹{gamePrizes.middleLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.bottomLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 2)}
-                          disabled={!!winners.bottomLine}
-                        >
-                          <div className="text-center">
-                            <div>💫 Bot</div>
-                            <div className="text-xs">₹{gamePrizes.bottomLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.corners ? 'btn-claimed' : 'btn-secondary'}`}
-                          onClick={() => handleClaim('corners')}
-                          disabled={!!winners.corners}
-                        >
-                          <div className="text-center">
-                            <div>🔸 Corner</div>
-                            <div className="text-xs">₹{gamePrizes.corners}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 col-span-2 ${winners.house ? 'btn-claimed' : 'btn-danger'}`}
-                          onClick={() => handleClaim('house')}
-                          disabled={!!winners.house}
-                        >
-                          <div className="text-center">
-                            <div>🎉 Full House</div>
-                            <div className="text-xs">₹{gamePrizes.house}</div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Landscape layout - tickets with buttons below */}
-                <div className="hidden landscape:block">
-                  <AllTicketsView
-                    tickets={tickets}
-                    marked={marked}
-                    onCell={toggleMark}
-                    latestNumber={latest}
-                  />
-                  
-                  {/* Claim buttons - below tickets for landscape */}
-                  <div className="mt-4 px-2">
-                    <div className="bg-white border-2 border-purple-400 rounded-lg p-3 shadow-lg">
-                      <h3 className="text-center font-bold text-purple-800 mb-3 text-sm">
-                        🏆 Claim Prize 🏆
-                      </h3>
-                      <div className="grid grid-cols-5 gap-2">
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.topLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 0)}
-                          disabled={!!winners.topLine}
-                        >
-                          <div className="text-center">
-                            <div>🔥 Top</div>
-                            <div className="text-xs">₹{gamePrizes.topLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.middleLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 1)}
-                          disabled={!!winners.middleLine}
-                        >
-                          <div className="text-center">
-                            <div>⭐ Mid</div>
-                            <div className="text-xs">₹{gamePrizes.middleLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.bottomLine ? 'btn-claimed' : 'btn-primary'}`}
-                          onClick={() => handleClaim('line', 2)}
-                          disabled={!!winners.bottomLine}
-                        >
-                          <div className="text-center">
-                            <div>💫 Bot</div>
-                            <div className="text-xs">₹{gamePrizes.bottomLine}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.corners ? 'btn-claimed' : 'btn-secondary'}`}
-                          onClick={() => handleClaim('corners')}
-                          disabled={!!winners.corners}
-                        >
-                          <div className="text-center">
-                            <div>🔸 Corner</div>
-                            <div className="text-xs">₹{gamePrizes.corners}</div>
-                          </div>
-                        </button>
-                        <button 
-                          className={`btn-claim-compact text-xs py-2 ${winners.house ? 'btn-claimed' : 'btn-danger'}`}
-                          onClick={() => handleClaim('house')}
-                          disabled={!!winners.house}
-                        >
-                          <div className="text-center">
-                            <div>🎉 House</div>
-                            <div className="text-xs">₹{gamePrizes.house}</div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
+            !isHost && tickets && tickets.length > 0 && !gameCompleted && (
+              <PlayerGameView
+                tickets={tickets}
+                marked={marked}
+                onCell={toggleMark}
+                latestNumber={latest}
+                drawn={drawn}
+                gamePrizes={gamePrizes}
+                winners={winners}
+                handleClaim={handleClaim}
+              />
             )
           )}
         </div>
       )}
 
-      {/* footer */}
-      {!gameCancelled && (
-        <div className="bg-gradient-to-r from-green-500 to-blue-500 py-2 flex justify-center gap-2">
-          {drawn.slice(-5).map((n, i, arr) => (
-            <span key={i} className={`px-2 py-1 rounded-full font-bold ${i === arr.length - 1 ? 'bg-yellow-200' : 'bg-white'}`}>{n}</span>
-          ))}
-        </div>
-      )}
+
     </div>
   );
 }
