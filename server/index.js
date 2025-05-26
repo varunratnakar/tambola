@@ -194,18 +194,22 @@ io.on('connection', (socket) => {
         let prizeMessage = '';
         let prizeAmount = 0;
         let lineIndex = null;
+        let announcementDuration = 5000; // Default 5 seconds
         
         if (claimType === 'line') {
           const lineNames = { topLine: 'Top Line', middleLine: 'Middle Line', bottomLine: 'Bottom Line' };
           prizeMessage = lineNames[result.lineType];
           prizeAmount = game.prizes[result.lineType];
           lineIndex = lines?.[0] ?? 0;
+          announcementDuration = 4000; // 4 seconds for line wins
         } else if (claimType === 'corners') {
           prizeMessage = 'Corners';
           prizeAmount = game.prizes.corners;
+          announcementDuration = 4000; // 4 seconds for corners
         } else if (claimType === 'early5') {
           prizeMessage = 'Early 5';
           prizeAmount = game.prizes.early5;
+          announcementDuration = 4000; // 4 seconds for early 5
         } else if (claimType === 'house') {
           if (result.housePosition) {
             prizeMessage = `Full House #${result.housePosition}`;
@@ -214,7 +218,11 @@ io.on('connection', (socket) => {
             prizeMessage = 'Full House';
             prizeAmount = game.prizes.house;
           }
+          announcementDuration = 6000; // 6 seconds for full house (more exciting)
         }
+        
+        // Pause auto-draw for winner announcement
+        gameManager.pauseAutoDraw(gameId, announcementDuration);
         
         io.to(gameId).emit('claim_success', { 
           playerId: socket.id, 
@@ -224,7 +232,8 @@ io.on('connection', (socket) => {
           prizeAmount,
           lineIndex,
           ticketIndex: result.ticketIndex,
-          housePosition: result.housePosition
+          housePosition: result.housePosition,
+          announcementDuration // Let clients know how long the announcement will be
         });
         
         // Check if all prizes are claimed and end game early if so

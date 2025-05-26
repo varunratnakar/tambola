@@ -256,17 +256,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     }
   }, [socket, gameId]);
 
-  // Announce game start
-  useEffect(() => {
-    if (gameStarted && voiceEnabled && voiceService.isSupported()) {
-      // Only announce once when game starts
-      const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
-      if (!hasAnnounced) {
-        voiceService.announceEvent('The game has started. Good luck everyone!');
-        sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
-      }
-    }
-  }, [gameStarted, voiceEnabled, gameId]);
+  // Game start announcement is now handled in the game_started event listener
 
   useEffect(() => {
     // Handle heartbeat to keep connection alive
@@ -314,10 +304,10 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       }
     };
     
-    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount, housePosition }) => {
+    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount, housePosition, announcementDuration }) => {
       alert(`🎉 Amazing! ${playerName} won ${prizeMessage}! 🎉`);
       
-      // Announce the win with voice
+      // Announce the win with voice - this will automatically pause the timer on server side
       if (voiceEnabled && voiceService.isSupported()) {
         voiceService.announceEvent(`Congratulations ${playerName}! ${prizeMessage} claimed!`);
       }
@@ -372,6 +362,19 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       if (prizes) setGamePrizes(prizes);
     };
 
+    const onGameStarted = ({ gameId: startedGameId }) => {
+      setGameStarted(true);
+      
+      // Announce game start immediately when the event is received
+      if (voiceEnabled && voiceService.isSupported()) {
+        const hasAnnounced = sessionStorage.getItem(`game-start-announced-${startedGameId}`);
+        if (!hasAnnounced) {
+          voiceService.announceEvent('The game has started. Good luck everyone! Numbers will begin drawing shortly.');
+          sessionStorage.setItem(`game-start-announced-${startedGameId}`, 'true');
+        }
+      }
+    };
+
     socket.on('number_drawn', onNumber);
     socket.on('claim_success', onClaimSuccess);
     socket.on('claim_failed', onClaimFailed);
@@ -379,6 +382,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     socket.on('game_cancelled', onGameCancelled);
     socket.on('game_info', onGameInfo);
     socket.on('prizes_updated', onPrizesUpdated);
+    socket.on('game_started', onGameStarted);
     
     return () => {
       socket.off('heartbeat');
@@ -393,6 +397,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('game_cancelled', onGameCancelled);
       socket.off('game_info', onGameInfo);
       socket.off('prizes_updated', onPrizesUpdated);
+      socket.off('game_started', onGameStarted);
     };
   }, [socket]);
 

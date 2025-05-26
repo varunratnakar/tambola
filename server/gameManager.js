@@ -155,12 +155,13 @@ class GameManager {
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
     
-    // Auto-start number drawing after 5 seconds using host's chosen interval
+    // Auto-start number drawing after 8 seconds to allow for initial announcement
+    // This gives time for the client to announce "Game has started, let's begin!"
     setTimeout(() => {
       const game = this.games.get(gameId);
       const interval = game?.options?.autoDrawInterval || 15;
       this.startAutoDraw(gameId, interval);
-    }, 5000);
+    }, 8000); // Increased from 5 to 8 seconds for announcement
   }
 
   cancelGame(gameId, socketId) {
@@ -426,7 +427,7 @@ class GameManager {
     return false;
   }
 
-  // Auto-draw functionality - now server-managed
+  // Auto-draw functionality - now server-managed with announcement pauses
   startAutoDraw(gameId, interval = 15) {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game || !game.started) return false;
@@ -436,11 +437,18 @@ class GameManager {
 
     game.autoDrawEnabled = true;
     game.autoDrawInterval = interval;
+    game.autoDrawPaused = false;
+    game.nextDrawTime = Date.now() + (interval * 1000);
     
     console.log(`Starting auto-draw for game ${gameId} with ${interval}s interval`);
     
-    // Start the auto-draw timer
+    // Start the auto-draw timer with 1-second precision for pause handling
     game.autoDrawTimer = setInterval(() => {
+      // Skip if paused or if it's not time yet
+      if (game.autoDrawPaused || Date.now() < game.nextDrawTime) {
+        return;
+      }
+      
       const drawnNumber = this.drawNextNumber(gameId);
       if (drawnNumber) {
         // console.log(`Auto-drew number ${drawnNumber} for game ${gameId}`);
@@ -450,8 +458,11 @@ class GameManager {
           remainingCount: game.remainingNumbers.length,
           autoDrawn: true
         });
+        
+        // Schedule next draw
+        game.nextDrawTime = Date.now() + (interval * 1000);
       }
-    }, interval * 1000);
+    }, 1000); // Check every second for precise timing
 
     // Notify players that auto-draw started
     this.io.to(gameId).emit('auto_draw_started', { interval });
@@ -463,10 +474,40 @@ class GameManager {
     if (!game) return false;
 
     game.autoDrawEnabled = false;
+    game.autoDrawPaused = false;
     if (game.autoDrawTimer) {
       clearInterval(game.autoDrawTimer);
       game.autoDrawTimer = null;
     }
+    return true;
+  }
+
+  pauseAutoDraw(gameId, pauseDurationMs = 5000) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game || !game.autoDrawEnabled) return false;
+
+    game.autoDrawPaused = true;
+    console.log(`Auto-draw paused for game ${gameId} for ${pauseDurationMs}ms`);
+    
+    // Extend the next draw time by the pause duration
+    if (game.nextDrawTime) {
+      game.nextDrawTime += pauseDurationMs;
+    }
+    
+    // Auto-resume after the pause duration
+    setTimeout(() => {
+      this.resumeAutoDraw(gameId);
+    }, pauseDurationMs);
+    
+    return true;
+  }
+
+  resumeAutoDraw(gameId) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game || !game.autoDrawEnabled) return false;
+
+    game.autoDrawPaused = false;
+    console.log(`Auto-draw resumed for game ${gameId}`);
     return true;
   }
 
