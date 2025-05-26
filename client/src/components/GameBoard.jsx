@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import voiceService from '../services/voiceService.js';
+import voiceService from '../services/voiceService';
 
 function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
   const nums = Array.from({ length: 90 }, (_, i) => i + 1);
@@ -258,28 +258,17 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     }
   }, [socket, gameId]);
 
-  // Announce game start
-  useEffect(() => {
-    if (gameStarted && voiceEnabled && voiceService.isSupported()) {
-      // Only announce once when game starts
-      const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
-      if (!hasAnnounced) {
-        voiceService.announceEvent('Welcome to Tambola! The game has started. Good luck everyone!');
-        sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
-      }
-    }
-  }, [gameStarted, voiceEnabled, gameId]);
-
-  // DEBUG – remove later
-  useEffect(() => {
-    console.log('GB props:', { gameId, isHost, initialTickets });
-    console.log('tickets state:', tickets);
-    console.log('socket in GameBoard:', socket);
-    if (socket) {
-      console.log('socket id:', socket.id);
-      window.socket = socket;            // expose for manual testing
-    }
-  }, [initialTickets, tickets]);
+  // // Announce game start
+  // useEffect(() => {
+  //   if (gameStarted && voiceEnabled && voiceService.isSupported()) {
+  //     // Only announce once when game starts
+  //     const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
+  //     if (!hasAnnounced) {
+  //       voiceService.announceEvent('Welcome to Tambola! The game has started. Good luck everyone!');
+  //       sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
+  //     }
+  //   }
+  // }, [gameStarted, voiceEnabled, gameId]);
 
   useEffect(() => {
     // Handle heartbeat to keep connection alive
