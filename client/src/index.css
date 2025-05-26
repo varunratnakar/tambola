@@ -432,7 +432,7 @@
     justify-content: center;
     flex-shrink: 0;
     /* box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4); */
-    animation: latestNumberPulse 2s ease-in-out infinite;
+    animation: latestNumberPulse 2s ease-in-out infinite alternate;
     position: relative;
     z-index: 10;
     transition: all 0.3s ease;
@@ -1613,6 +1613,15 @@
     opacity: 1;
     background: linear-gradient(135deg, #ff6b6b, #ee5a24);
   }
+}
+
+@keyframes slideDownToast {
+  0% { transform: translateY(-10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-down {
+  animation: slideDownToast 0.3s ease-out;
 }
 
  

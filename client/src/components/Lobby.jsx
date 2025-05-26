@@ -16,7 +16,7 @@ function Lobby({ onStart }) {
     enableMultipleHouses: false,
     maxHouseWinners: 3,
     houseReductionPercent: 50,
-    autoDrawInterval: 15 // Default 15 seconds
+    autoDrawInterval: 10 // Default 15 seconds
   });
   
   // Prize tracking
@@ -429,12 +429,10 @@ function Lobby({ onStart }) {
                   onChange={(e) => setGameOptions({...gameOptions, autoDrawInterval: parseInt(e.target.value)})}
                 >
                   <option value={5}>5 seconds (Fast)</option>
-                  <option value={10}>10 seconds</option>
-                  <option value={15}>15 seconds (Default)</option>
+                  <option value={10}>10 seconds (Default)</option>
+                  <option value={15}>15 seconds</option>
                   <option value={20}>20 seconds</option>
-                  <option value={30}>30 seconds</option>
-                  <option value={45}>45 seconds</option>
-                  <option value={60}>1 minute (Slow)</option>
+                  <option value={30}>30 seconds (Slow)</option>
                 </select>
               </div>
             </div>

@@ -37,12 +37,12 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
               <div key={index} className={`ticket-wrapper ${theme === 'fancy' ? 'ticket-fancy' : theme === 'kids' ? 'ticket-kids' : theme === 'professional' ? 'ticket-professional' : ''}`}>
                 <div className={`ticket-header ${theme === 'fancy' ? 'header-fancy' : theme === 'kids' ? 'header-kids' : theme === 'professional' ? 'header-professional' : ''}`}>
                 <span className="ticket-number">Ticket {index + 1}</span>
-                {latestNumber && (
+        {latestNumber && (
                   <span 
                     key={latestNumberKey} 
                     className="ticket-latest-number new-number"
-                  >
-                    {latestNumber}
+          >
+            {latestNumber}
                   </span>
                 )}
                 <div className="ticket-info-right">
@@ -52,21 +52,21 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
                     </span>
                   )}
                 </div>
-              </div>
+          </div>
                               <div className={`ticket-grid-new ${theme === 'fancy' ? 'grid-fancy' : theme === 'kids' ? 'grid-kids' : theme === 'professional' ? 'grid-professional' : ''}`}>
-                {ticket.map((row, rowIdx) => (
+          {ticket.map((row, rowIdx) => (
                   <div key={rowIdx} className="ticket-row">
-                    {row.map((num, colIdx) => (
-                      <div
-                        key={colIdx}
+              {row.map((num, colIdx) => (
+                <div
+                  key={colIdx}
                         onClick={() => num && onCell(num, index)}
                         className={`ticket-cell ${!num ? 'empty-cell' : marked[index]?.includes(num) ? 'marked-cell' : 'number-cell'}`}
-                      >
-                        {num || ''}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                >
+                  {num || ''}
+                </div>
+              ))}
+            </div>
+          ))}
               </div>
             </div>
           ))}
@@ -208,7 +208,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   const [gameEndInfo, setGameEndInfo] = useState(null);
   const [gameCancelled, setGameCancelled] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  
+
   // Prize and winner tracking
   const [gamePrizes, setGamePrizes] = useState({
     topLine: 0,
@@ -240,14 +240,26 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   const [autoDrawInterval, setAutoDrawInterval] = useState(15); // seconds
   
   // Voice announcement controls
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [voiceStatus, setVoiceStatus] = useState(voiceService.getStatus());
+  const initialVoiceStatus = voiceService.getStatus();
+  const [voiceEnabled, setVoiceEnabled] = useState(initialVoiceStatus.isEnabled);
+  const [voiceStatus, setVoiceStatus] = useState(initialVoiceStatus);
   
   // Theme selection
   const [theme, setTheme] = useState('simple');
   
   // Connection status
   const [connectionStatus, setConnectionStatus] = useState('connected');
+
+  // Non-blocking toast notifications
+  const [notifications, setNotifications] = useState([]);
+
+  const addNotification = (message, type = 'info', duration = 5000) => {
+    const id = Date.now() + Math.random();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, duration);
+  };
 
   // Request game info on mount
   useEffect(() => {
@@ -256,7 +268,17 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     }
   }, [socket, gameId]);
 
-  // Game start announcement is now handled in the game_started event listener
+  // Announce game start
+  useEffect(() => {
+    if (gameStarted && voiceEnabled && voiceService.isSupported()) {
+      // Only announce once when game starts
+      const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
+      if (!hasAnnounced) {
+        voiceService.announceEvent('The game has started. Good luck everyone!');
+        sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
+      }
+    }
+  }, [gameStarted, voiceEnabled, gameId]);
 
   useEffect(() => {
     // Handle heartbeat to keep connection alive
@@ -287,7 +309,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       if (drawnNumbers) {
         setDrawn(drawnNumbers);
       } else {
-        setDrawn((prev) => [...prev, number]);
+      setDrawn((prev) => [...prev, number]);
       }
       setLatest(number);
       setLatestNumberKey(prev => prev + 1); // Trigger animation by changing key
@@ -304,13 +326,13 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       }
     };
     
-    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount, housePosition, announcementDuration }) => {
-      alert(`🎉 Amazing! ${playerName} won ${prizeMessage}! 🎉`);
-      
-      // Announce the win with voice - this will automatically pause the timer on server side
+    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount, housePosition }) => {
+      // Announce the win with voice
       if (voiceEnabled && voiceService.isSupported()) {
         voiceService.announceEvent(`Congratulations ${playerName}! ${prizeMessage} claimed!`);
       }
+
+      addNotification(`🎉 ${playerName} won ${prizeMessage}!`, 'success');
       
       // Update winners state
       if (claimType === 'line') {
@@ -333,7 +355,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     };
 
     const onClaimFailed = ({ reason }) => {
-      alert(`😅 Oops! ${reason} - Keep trying! 💪`);
+      addNotification(`😅 ${reason} – Keep trying!`, 'error');
     };
 
     const onGameCompleted = ({ reason, winners, totalNumbers }) => {
@@ -362,19 +384,6 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       if (prizes) setGamePrizes(prizes);
     };
 
-    const onGameStarted = ({ gameId: startedGameId }) => {
-      setGameStarted(true);
-      
-      // Announce game start immediately when the event is received
-      if (voiceEnabled && voiceService.isSupported()) {
-        const hasAnnounced = sessionStorage.getItem(`game-start-announced-${startedGameId}`);
-        if (!hasAnnounced) {
-          voiceService.announceEvent('The game has started. Good luck everyone! Numbers will begin drawing shortly.');
-          sessionStorage.setItem(`game-start-announced-${startedGameId}`, 'true');
-        }
-      }
-    };
-
     socket.on('number_drawn', onNumber);
     socket.on('claim_success', onClaimSuccess);
     socket.on('claim_failed', onClaimFailed);
@@ -382,7 +391,6 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     socket.on('game_cancelled', onGameCancelled);
     socket.on('game_info', onGameInfo);
     socket.on('prizes_updated', onPrizesUpdated);
-    socket.on('game_started', onGameStarted);
     
     return () => {
       socket.off('heartbeat');
@@ -397,7 +405,6 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('game_cancelled', onGameCancelled);
       socket.off('game_info', onGameInfo);
       socket.off('prizes_updated', onPrizesUpdated);
-      socket.off('game_started', onGameStarted);
     };
   }, [socket]);
 
@@ -419,6 +426,15 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     const onAutoDrawStarted = ({ interval }) => {
       setAutoDrawEnabled(true);
       setAutoDrawInterval(interval);
+
+      // Voice announce game start (only once)
+      if (voiceEnabled && voiceService.isSupported()) {
+        const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
+        if (!hasAnnounced) {
+          voiceService.announceEvent('The game has started. Good luck everyone!');
+          sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
+        }
+      }
     };
 
     const onAutoDrawStopped = () => {
@@ -432,7 +448,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('auto_draw_started', onAutoDrawStarted);
       socket.off('auto_draw_stopped', onAutoDrawStopped);
     };
-  }, [socket]);
+  }, [socket, voiceEnabled, gameId]);
   
   const toggleMark = (n, ticketIndex) => {
     setMarked((prev) => {
@@ -445,7 +461,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   };
   
   const handleClaim = (type, lineIndex = null) => {
-    const payload = { gameId, claimType: type };
+    const payload = { gameId, claimType: type, markedNumbers: marked };
     if (type === 'line' && lineIndex !== null) {
       payload.lines = [lineIndex];
     }
@@ -466,7 +482,25 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
         </div>
       )}
 
-
+      {/* Toast Notifications */}
+      {notifications.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {notifications.map((n) => (
+            <div
+              key={n.id}
+              className={`px-4 py-2 rounded-lg shadow-lg text-white animate-slide-down ${
+                n.type === 'success'
+                  ? 'bg-green-600'
+                  : n.type === 'error'
+                  ? 'bg-red-600'
+                  : 'bg-blue-600'
+              }`}
+            >
+              {n.message}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Game completed notification */}
       {gameCompleted && gameEndInfo && (
@@ -534,7 +568,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
                   <div key={idx} className="flex justify-between items-center text-sm">
                     <span className="text-green-700">{winning.prize}</span>
                     <span className="font-bold text-green-800">₹{winning.amount}</span>
-                  </div>
+                    </div>
                 ))}
                 <div className="border-t border-green-300 pt-1 mt-2">
                   <div className="flex justify-between items-center text-sm">
@@ -552,9 +586,9 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               <div className="flex justify-between items-center text-sm">
                 <span className="text-green-700">Tickets Cost ({tickets.length} × ₹{pricePerTicket}):</span>
                 <span className="font-bold text-red-600">-₹{tickets.length * pricePerTicket}</span>
-              </div>
-            </div>
-            
+                    </div>
+                  </div>
+
             {/* Net profit/loss */}
             <div className="border-t-2 border-green-400 pt-2 mt-2">
               {(() => {
@@ -573,8 +607,8 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
                   </div>
                 );
               })()}
-            </div>
-          </div>
+                  </div>
+                </div>
         </div>
       )}
 

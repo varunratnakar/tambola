@@ -8,10 +8,10 @@ class VoiceService {
     this.pitch = 1.0;
     this.volume = 0.8;
     
-    console.log('VoiceService: Initializing...', {
-      speechSynthesis: !!window.speechSynthesis,
-      voicesLength: this.synth?.getVoices()?.length || 0
-    });
+    // console.log('VoiceService: Initializing...', {
+    //   speechSynthesis: !!window.speechSynthesis,
+    //   voicesLength: this.synth?.getVoices()?.length || 0
+    // });
     
     // Initialize voice when voices are loaded
     this.initializeVoice();
@@ -19,7 +19,7 @@ class VoiceService {
     // Handle voice loading
     if (this.synth.onvoiceschanged !== undefined) {
       this.synth.onvoiceschanged = () => {
-        console.log('VoiceService: Voices changed, reinitializing...');
+        // console.log('VoiceService: Voices changed, reinitializing...');
         this.initializeVoice();
       };
     }
@@ -27,7 +27,7 @@ class VoiceService {
 
   initializeVoice() {
     const voices = this.synth.getVoices();
-    console.log('VoiceService: Available voices:', voices.length, voices.map(v => `${v.name} (${v.lang})`));
+    // console.log('VoiceService: Available voices:', voices.length, voices.map(v => `${v.name} (${v.lang})`));
     
     // Prioritize Indian English voices first, then other English voices
     const preferredVoices = [
@@ -175,16 +175,16 @@ class VoiceService {
 
   // Announce a number with exciting Tambola style
   announceNumber(number) {
-    console.log('VoiceService: announceNumber called', {
-      number,
-      isEnabled: this.isEnabled,
-      hasSynth: !!this.synth,
-      hasVoice: !!this.voice,
-      voiceName: this.voice?.name
-    });
+    // console.log('VoiceService: announceNumber called', {
+    //   number,
+    //   isEnabled: this.isEnabled,
+    //   hasSynth: !!this.synth,
+    //   hasVoice: !!this.voice,
+    //   voiceName: this.voice?.name
+    // });
     
     if (!this.isEnabled || !this.synth) {
-      console.log('VoiceService: Announcement skipped - service disabled or no synth');
+      // console.log('VoiceService: Announcement skipped - service disabled or no synth');
       return;
     }
     
@@ -193,7 +193,7 @@ class VoiceService {
     
     // Chrome fix: Sometimes speech synthesis gets stuck, this helps reset it
     if (this.synth.speaking || this.synth.pending) {
-      console.log('VoiceService: Synthesis appears stuck, attempting reset...');
+      // console.log('VoiceService: Synthesis appears stuck, attempting reset...');
       this.synth.cancel();
       // Small delay to ensure cancellation completes
       setTimeout(() => {
@@ -206,7 +206,7 @@ class VoiceService {
   }
   
   continueAnnouncement(number) {
-    console.log('VoiceService: continueAnnouncement called', { number });
+    // console.log('VoiceService: continueAnnouncement called', { number });
     
     const baseCall = this.getNumberCall(number);
     
@@ -223,32 +223,32 @@ class VoiceService {
     utterance.pitch = this.pitch + 0.15; // Higher pitch for excitement
     utterance.volume = this.volume;
     
-    utterance.onstart = () => {
-      console.log('VoiceService: Announcement started', { number, text: baseCall });
-    };
+    // utterance.onstart = () => {
+    //   console.log('VoiceService: Announcement started', { number, text: baseCall });
+    // };
     
-    utterance.onend = () => {
-      console.log('VoiceService: Announcement ended', { number, text: baseCall });
-    };
+    // utterance.onend = () => {
+    //   console.log('VoiceService: Announcement ended', { number, text: baseCall });
+    // };
     
-    utterance.onerror = (event) => {
-      console.error('VoiceService: Announcement error', { 
-        error: event.error, 
-        number, 
-        text: baseCall 
-      });
-    };
+    // utterance.onerror = (event) => {
+    //   console.error('VoiceService: Announcement error', { 
+    //     error: event.error, 
+    //     number, 
+    //     text: baseCall 
+    //   });
+    // };
     
-    console.log('VoiceService: Speaking announcement...', {
-      text: baseCall,
-      synthSpeaking: this.synth.speaking,
-      synthPending: this.synth.pending,
-      synthPaused: this.synth.paused
-    });
+    // console.log('VoiceService: Speaking announcement...', {
+    //   text: baseCall,
+    //   synthSpeaking: this.synth.speaking,
+    //   synthPending: this.synth.pending,
+    //   synthPaused: this.synth.paused
+    // });
     
     // Check if synthesis is stuck and try to resume
     if (this.synth.paused) {
-      console.log('VoiceService: Synthesis was paused, resuming...');
+      // console.log('VoiceService: Synthesis was paused, resuming...');
       this.synth.resume();
     }
     
@@ -257,22 +257,22 @@ class VoiceService {
   
   // Speak a sequence of text parts with different settings and pauses
   speakSequence(parts, index) {
-    console.log('VoiceService: speakSequence called', { index, totalParts: parts.length, text: parts[index]?.text });
+    // console.log('VoiceService: speakSequence called', { index, totalParts: parts.length, text: parts[index]?.text });
     
     if (index >= parts.length) {
-      console.log('VoiceService: speakSequence completed');
+      // console.log('VoiceService: speakSequence completed');
       return;
     }
     
     const part = parts[index];
     const utterance = new SpeechSynthesisUtterance(part.text);
     
-    console.log('VoiceService: Creating utterance', {
-      text: part.text,
-      rate: part.rate,
-      pitch: part.pitch,
-      hasVoice: !!this.voice
-    });
+    // console.log('VoiceService: Creating utterance', {
+    //   text: part.text,
+    //   rate: part.rate,
+    //   pitch: part.pitch,
+    //   hasVoice: !!this.voice
+    // });
     
     if (this.voice) {
       utterance.voice = this.voice;
@@ -284,7 +284,7 @@ class VoiceService {
     
     // When this part finishes, wait and then speak the next part
     utterance.onend = () => {
-      console.log('VoiceService: Utterance ended', { index, text: part.text });
+      // console.log('VoiceService: Utterance ended', { index, text: part.text });
       if (part.pause > 0) {
         setTimeout(() => {
           this.speakSequence(parts, index + 1);
@@ -294,27 +294,27 @@ class VoiceService {
       }
     };
     
-    utterance.onerror = (event) => {
-      console.error('VoiceService: Utterance error', { 
-        error: event.error, 
-        text: part.text, 
-        index 
-      });
-    };
+    // utterance.onerror = (event) => {
+    //   console.error('VoiceService: Utterance error', { 
+    //     error: event.error, 
+    //     text: part.text, 
+    //     index 
+    //   });
+    // };
     
-    utterance.onstart = () => {
-      console.log('VoiceService: Utterance started', { index, text: part.text });
-    };
+    // utterance.onstart = () => {
+    //   console.log('VoiceService: Utterance started', { index, text: part.text });
+    // };
     
-    console.log('VoiceService: Speaking utterance...', {
-      synthSpeaking: this.synth.speaking,
-      synthPending: this.synth.pending,
-      synthPaused: this.synth.paused
-    });
+    // console.log('VoiceService: Speaking utterance...', {
+    //   synthSpeaking: this.synth.speaking,
+    //   synthPending: this.synth.pending,
+    //   synthPaused: this.synth.paused
+    // });
     
     // Check if synthesis is stuck and try to resume
     if (this.synth.paused) {
-      console.log('VoiceService: Synthesis was paused, resuming...');
+      // console.log('VoiceService: Synthesis was paused, resuming...');
       this.synth.resume();
     }
     
@@ -404,7 +404,7 @@ class VoiceService {
     const selectedVoice = voices.find(v => v.name === voiceName);
     if (selectedVoice) {
       this.voice = selectedVoice;
-      console.log('Voice changed to:', this.voice.name, 'Language:', this.voice.lang);
+      // console.log('Voice changed to:', this.voice.name, 'Language:', this.voice.lang);
     }
   }
 
@@ -429,15 +429,15 @@ class VoiceService {
 
   // Test function to debug voice issues
   testVoice() {
-    console.log('VoiceService: Testing voice...');
+    // console.log('VoiceService: Testing voice...');
     
     if (!this.isSupported()) {
-      console.error('VoiceService: Speech synthesis not supported');
+      // console.error('VoiceService: Speech synthesis not supported');
       return false;
     }
     
     if (!this.isEnabled) {
-      console.log('VoiceService: Voice is disabled');
+      // console.log('VoiceService: Voice is disabled');
       return false;
     }
     

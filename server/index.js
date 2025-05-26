@@ -39,7 +39,7 @@ app.get('/', (_, res) => res.send('Tambola server is running'));
 
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
-  
+
   // Send heartbeat to keep connection alive
   const heartbeatInterval = setInterval(() => {
     socket.emit('heartbeat', { timestamp: Date.now() });
@@ -114,7 +114,7 @@ io.on('connection', (socket) => {
             prizes: game.prizes, 
             totalTicketsSold: game.totalTicketsSold,
             totalRevenue: game.totalTicketsSold * game.pricePerTicket
-          });
+        });
         });
       }
       
@@ -185,44 +185,36 @@ io.on('connection', (socket) => {
   // socket.on('start_auto_draw') - removed  
   // socket.on('stop_auto_draw') - removed
 
-  socket.on('claim', ({ gameId, claimType, lines }, cb) => {
+  socket.on('claim', ({ gameId, claimType, lines, markedNumbers }, cb) => {
     // claimType: 'line', 'corners', 'early5', or 'house'
     try {
-      const result = gameManager.validateClaim(gameId, socket.id, claimType, lines);
+      const result = gameManager.validateClaim(gameId, socket.id, claimType, lines, markedNumbers);
       if (result.valid) {
         const game = gameManager.getGame(gameId);
         let prizeMessage = '';
         let prizeAmount = 0;
         let lineIndex = null;
-        let announcementDuration = 5000; // Default 5 seconds
         
         if (claimType === 'line') {
           const lineNames = { topLine: 'Top Line', middleLine: 'Middle Line', bottomLine: 'Bottom Line' };
           prizeMessage = lineNames[result.lineType];
           prizeAmount = game.prizes[result.lineType];
           lineIndex = lines?.[0] ?? 0;
-          announcementDuration = 4000; // 4 seconds for line wins
         } else if (claimType === 'corners') {
           prizeMessage = 'Corners';
           prizeAmount = game.prizes.corners;
-          announcementDuration = 4000; // 4 seconds for corners
         } else if (claimType === 'early5') {
           prizeMessage = 'Early 5';
           prizeAmount = game.prizes.early5;
-          announcementDuration = 4000; // 4 seconds for early 5
         } else if (claimType === 'house') {
           if (result.housePosition) {
             prizeMessage = `Full House #${result.housePosition}`;
             prizeAmount = result.prizeAmount;
           } else {
-            prizeMessage = 'Full House';
+          prizeMessage = 'Full House';
             prizeAmount = game.prizes.house;
           }
-          announcementDuration = 6000; // 6 seconds for full house (more exciting)
         }
-        
-        // Pause auto-draw for winner announcement
-        gameManager.pauseAutoDraw(gameId, announcementDuration);
         
         io.to(gameId).emit('claim_success', { 
           playerId: socket.id, 
@@ -232,9 +224,11 @@ io.on('connection', (socket) => {
           prizeAmount,
           lineIndex,
           ticketIndex: result.ticketIndex,
-          housePosition: result.housePosition,
-          announcementDuration // Let clients know how long the announcement will be
+          housePosition: result.housePosition
         });
+        
+        // Pause auto-draw briefly to allow winner announcement
+        gameManager.pauseAutoDraw(gameId, 8);
         
         // Check if all prizes are claimed and end game early if so
         gameManager.checkGameCompletion(gameId);

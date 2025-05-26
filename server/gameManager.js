@@ -155,13 +155,12 @@ class GameManager {
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
     
-    // Auto-start number drawing after 8 seconds to allow for initial announcement
-    // This gives time for the client to announce "Game has started, let's begin!"
+    // Auto-start number drawing after 5 seconds using host's chosen interval
     setTimeout(() => {
       const game = this.games.get(gameId);
       const interval = game?.options?.autoDrawInterval || 15;
       this.startAutoDraw(gameId, interval);
-    }, 8000); // Increased from 5 to 8 seconds for announcement
+    }, 5000);
   }
 
   cancelGame(gameId, socketId) {
@@ -222,7 +221,7 @@ class GameManager {
     }, 5000); // 5 second delay
   }
 
-  validateClaim(gameId, socketId, claimType, lines) {
+  validateClaim(gameId, socketId, claimType, lines = [], markedNumbersMap = {}) {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     const player = game.players[socketId];
@@ -236,82 +235,83 @@ class GameManager {
     // Scan all tickets to find a valid claim
     for (let ticketIndex = 0; ticketIndex < tickets.length; ticketIndex++) {
       const ticket = tickets[ticketIndex];
-    const flatTicketNumbers = ticket.flat().filter(Boolean);
+      const flatTicketNumbers = ticket.flat().filter(Boolean);
+      const markedNumbersForTicket = markedNumbersMap?.[ticketIndex] || [];
 
-    if (claimType === 'line') {
-      const lineIndex = lines?.[0] ?? 0;
-      const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
-      const lineType = lineTypes[lineIndex];
-      
-      if (game.winners[lineType]) {
-          continue; // This prize already claimed, check next ticket
-      }
-      
-      const lineNumbers = ticket[lineIndex].filter(Boolean);
-      const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        game.winners[lineType] = player.name;
-          return { valid: true, lineType, playerName: player.name, ticketIndex };
-      }
-    } else if (claimType === 'corners') {
-      if (game.winners.corners) {
-          continue; // Prize already claimed, check next ticket
-      }
-      
-      // Corner positions: [0,0], [0,8], [2,0], [2,8]
-      const cornerNumbers = [
-        ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
-      ].filter(Boolean);
-      
-      const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        game.winners.corners = player.name;
-          return { valid: true, playerName: player.name, ticketIndex };
-      }
-    } else if (claimType === 'early5') {
-      if (!game.options.enableEarly5 || game.winners.early5) {
-        continue; // Early 5 not enabled or already claimed
-      }
-      
-      const calledNumbers = flatTicketNumbers.filter(n => game.drawnNumbers.includes(n));
-      if (calledNumbers.length >= 5) {
-        game.winners.early5 = player.name;
-        return { valid: true, playerName: player.name, ticketIndex };
-      }
-    } else if (claimType === 'house') {
-      // Check if multiple houses are allowed and if limit is reached
-      if (!game.options.enableMultipleHouses && game.winners.house.length > 0) {
-        continue; // Multiple houses not enabled and one already claimed
-      }
-      if (game.winners.house.length >= game.options.maxHouseWinners) {
-        continue; // Maximum house winners reached
-      }
-      
-      // Check if this player already won a house
-      const playerAlreadyWonHouse = game.winners.house.some(winner => winner.playerName === player.name);
-      if (playerAlreadyWonHouse) {
-        continue; // Player already won a house
-      }
-      
-      const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
-      if (allCalled) {
-        const housePosition = game.winners.house.length + 1;
-        let prizeAmount = game.prizes.house;
+      if (claimType === 'line') {
+        const lineIndex = lines?.[0] ?? 0;
+        const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+        const lineType = lineTypes[lineIndex];
         
-        // Calculate reduced prize for subsequent houses
-        for (let i = 1; i < housePosition; i++) {
-          prizeAmount = Math.floor(prizeAmount * (game.options.houseReductionPercent / 100));
+        if (game.winners[lineType]) {
+            continue; // This prize already claimed, check next ticket
         }
         
-        game.winners.house.push({
-          playerName: player.name,
-          position: housePosition,
-          prizeAmount: prizeAmount
-        });
+        const lineNumbers = ticket[lineIndex].filter(Boolean);
+        const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
+        if (allCalled) {
+          game.winners[lineType] = player.name;
+            return { valid: true, lineType, playerName: player.name, ticketIndex };
+        }
+      } else if (claimType === 'corners') {
+        if (game.winners.corners) {
+            continue; // Prize already claimed, check next ticket
+        }
         
-        return { valid: true, playerName: player.name, ticketIndex, housePosition, prizeAmount };
+        // Corner positions: [0,0], [0,8], [2,0], [2,8]
+        const cornerNumbers = [
+          ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
+        ].filter(Boolean);
+        
+        const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
+        if (allCalled) {
+          game.winners.corners = player.name;
+            return { valid: true, playerName: player.name, ticketIndex };
+        }
+      } else if (claimType === 'early5') {
+        if (!game.options.enableEarly5 || game.winners.early5) {
+          continue; // Early 5 not enabled or already claimed
+        }
+        
+        const calledNumbers = flatTicketNumbers.filter(n => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
+        if (calledNumbers.length >= 5) {
+          game.winners.early5 = player.name;
+          return { valid: true, playerName: player.name, ticketIndex };
+        }
+      } else if (claimType === 'house') {
+        // Check if multiple houses are allowed and if limit is reached
+        if (!game.options.enableMultipleHouses && game.winners.house.length > 0) {
+          continue; // Multiple houses not enabled and one already claimed
+        }
+        if (game.winners.house.length >= game.options.maxHouseWinners) {
+          continue; // Maximum house winners reached
+        }
+        
+        // Check if this player already won a house
+        const playerAlreadyWonHouse = game.winners.house.some(winner => winner.playerName === player.name);
+        if (playerAlreadyWonHouse) {
+          continue; // Player already won a house
+        }
+        
+        const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
+        if (allCalled) {
+          const housePosition = game.winners.house.length + 1;
+          let prizeAmount = game.prizes.house;
+          
+          // Calculate reduced prize for subsequent houses
+          for (let i = 1; i < housePosition; i++) {
+            prizeAmount = Math.floor(prizeAmount * (game.options.houseReductionPercent / 100));
+          }
+          
+          game.winners.house.push({
+            playerName: player.name,
+            position: housePosition,
+            prizeAmount: prizeAmount
+          });
+          
+          return { valid: true, playerName: player.name, ticketIndex, housePosition, prizeAmount };
+        }
       }
-    }
     }
 
     // No valid claim found in any ticket
@@ -427,7 +427,7 @@ class GameManager {
     return false;
   }
 
-  // Auto-draw functionality - now server-managed with announcement pauses
+  // Auto-draw functionality - now server-managed
   startAutoDraw(gameId, interval = 15) {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game || !game.started) return false;
@@ -437,18 +437,11 @@ class GameManager {
 
     game.autoDrawEnabled = true;
     game.autoDrawInterval = interval;
-    game.autoDrawPaused = false;
-    game.nextDrawTime = Date.now() + (interval * 1000);
     
     console.log(`Starting auto-draw for game ${gameId} with ${interval}s interval`);
     
-    // Start the auto-draw timer with 1-second precision for pause handling
+    // Start the auto-draw timer
     game.autoDrawTimer = setInterval(() => {
-      // Skip if paused or if it's not time yet
-      if (game.autoDrawPaused || Date.now() < game.nextDrawTime) {
-        return;
-      }
-      
       const drawnNumber = this.drawNextNumber(gameId);
       if (drawnNumber) {
         // console.log(`Auto-drew number ${drawnNumber} for game ${gameId}`);
@@ -458,11 +451,8 @@ class GameManager {
           remainingCount: game.remainingNumbers.length,
           autoDrawn: true
         });
-        
-        // Schedule next draw
-        game.nextDrawTime = Date.now() + (interval * 1000);
       }
-    }, 1000); // Check every second for precise timing
+    }, interval * 1000);
 
     // Notify players that auto-draw started
     this.io.to(gameId).emit('auto_draw_started', { interval });
@@ -474,40 +464,12 @@ class GameManager {
     if (!game) return false;
 
     game.autoDrawEnabled = false;
-    game.autoDrawPaused = false;
     if (game.autoDrawTimer) {
       clearInterval(game.autoDrawTimer);
       game.autoDrawTimer = null;
     }
-    return true;
-  }
-
-  pauseAutoDraw(gameId, pauseDurationMs = 5000) {
-    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
-    if (!game || !game.autoDrawEnabled) return false;
-
-    game.autoDrawPaused = true;
-    console.log(`Auto-draw paused for game ${gameId} for ${pauseDurationMs}ms`);
-    
-    // Extend the next draw time by the pause duration
-    if (game.nextDrawTime) {
-      game.nextDrawTime += pauseDurationMs;
-    }
-    
-    // Auto-resume after the pause duration
-    setTimeout(() => {
-      this.resumeAutoDraw(gameId);
-    }, pauseDurationMs);
-    
-    return true;
-  }
-
-  resumeAutoDraw(gameId) {
-    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
-    if (!game || !game.autoDrawEnabled) return false;
-
-    game.autoDrawPaused = false;
-    console.log(`Auto-draw resumed for game ${gameId}`);
+    // Emit event so clients can update UI
+    this.io.to(gameId).emit('auto_draw_stopped');
     return true;
   }
 
@@ -566,7 +528,7 @@ class GameManager {
     if (socketId === game.host) {
       if (!game.started) {
         // Host left before game started - cancel immediately
-        this.games.delete(gameId);
+      this.games.delete(gameId);
         this.io.to(gameId).emit('game_cancelled', { reason: 'Host left before game started' });
         // Clean up all player mappings
         Object.keys(game.players).forEach(playerId => {
@@ -637,6 +599,33 @@ class GameManager {
         ticketCount: player.tickets.length,
         isHost: playerId === game.host
       }));
+  }
+
+  // Pause auto-draw for a specified number of seconds and then resume automatically
+  pauseAutoDraw(gameId, pauseSeconds = 8) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game || !game.started) return false;
+
+    // Stop current auto draw (also emits auto_draw_stopped)
+    this.stopAutoDraw(gameId);
+
+    // Clear any existing resume timer
+    if (game.autoDrawResumeTimer) {
+      clearTimeout(game.autoDrawResumeTimer);
+      game.autoDrawResumeTimer = null;
+    }
+
+    // Schedule auto draw to resume
+    game.autoDrawResumeTimer = setTimeout(() => {
+      // Ensure game still exists and not completed/cancelled
+      const currentGame = this.games.get(gameId);
+      if (currentGame && !this.checkGameCompletion(gameId)) {
+        const interval = currentGame.autoDrawInterval || currentGame?.options?.autoDrawInterval || 15;
+        this.startAutoDraw(gameId, interval);
+      }
+    }, pauseSeconds * 1000);
+
+    return true;
   }
 }
 
