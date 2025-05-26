@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import voiceService from '../services/voiceService';
+import voiceService from '../services/voiceService.js';
 
 function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
   const nums = Array.from({ length: 90 }, (_, i) => i + 1);
