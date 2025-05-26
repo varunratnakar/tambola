@@ -8,79 +8,47 @@
 // - Column ranges: 1-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80-90
 
 function generateTicket() {
-  const ranges = [
-    [1, 9],
-    [10, 19],
-    [20, 29],
-    [30, 39],
-    [40, 49],
-    [50, 59],
-    [60, 69],
-    [70, 79],
-    [80, 90],
-  ];
-
-  // Initialize empty 3x9 grid
+  // Step 1 & 2: create 3×9 matrix filled with nulls and randomly choose 15 spots (max 5 per row)
   const ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
-  
-  // Step 1: Determine which columns will have numbers for each row
-  // We need exactly 5 numbers per row (15 total) and no column can be empty
-  
-  // Create a distribution pattern: each row gets 5 columns, ensuring all 9 columns are used
-  const rowColumnAssignments = [[], [], []]; // Which columns each row will use
-  
-  // Start by ensuring each column appears at least once
-  const availableColumns = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-  shuffle(availableColumns);
-  
-  // Assign one column to each row first (9 columns, 3 rows, so 3 columns per row minimum)
-  for (let row = 0; row < 3; row++) {
-    for (let i = 0; i < 3; i++) {
-      rowColumnAssignments[row].push(availableColumns[row * 3 + i]);
+  const rowCounts = [0, 0, 0];
+  const chosenPositions = new Set();
+
+  while (chosenPositions.size < 15) {
+    const row = Math.floor(Math.random() * 3);
+    const col = Math.floor(Math.random() * 9);
+
+    if (rowCounts[row] >= 5) continue; // obey max 5 numbers per row
+
+    const key = `${row}-${col}`;
+    if (!chosenPositions.has(key)) {
+      chosenPositions.add(key);
+      rowCounts[row] += 1;
     }
   }
-  
-  // Now we need to assign 6 more column slots (2 per row) to reach 5 per row
-  // Randomly distribute the remaining slots
-  const remainingSlots = [];
-  for (let col = 0; col < 9; col++) {
-    remainingSlots.push(col, col); // Each column can appear in up to 2 additional rows
+
+  // Step 3: fill the chosen indices with unique random numbers (1-90)
+  const availableNumbers = shuffle(range(1, 90));
+  let numIdx = 0;
+  for (const pos of chosenPositions) {
+    const [r, c] = pos.split('-').map(Number);
+    ticket[r][c] = availableNumbers[numIdx++];
   }
-  shuffle(remainingSlots);
-  
-  // Assign 2 more columns to each row
-  for (let row = 0; row < 3; row++) {
-    let assigned = 0;
-    for (let i = 0; i < remainingSlots.length && assigned < 2; i++) {
-      const col = remainingSlots[i];
-      if (!rowColumnAssignments[row].includes(col)) {
-        rowColumnAssignments[row].push(col);
-        assigned++;
-        remainingSlots.splice(i, 1); // Remove this slot
-        i--; // Adjust index after removal
-      }
-    }
-  }
-  
-  // Step 2: Generate numbers for each column and place them
+
+  // Step 4: sort each column in ascending order (keeping empties on top)
   for (let col = 0; col < 9; col++) {
-    const [min, max] = ranges[col];
-    const availableNumbers = shuffle(range(min, max));
-    
-    // Find which rows will have numbers in this column
-    const rowsForThisColumn = [];
+    const numbers = [];
     for (let row = 0; row < 3; row++) {
-      if (rowColumnAssignments[row].includes(col)) {
-        rowsForThisColumn.push(row);
-      }
+      if (ticket[row][col] !== null) numbers.push(ticket[row][col]);
     }
-    
-    // Assign numbers to these rows in ascending order
-    const numbersForColumn = availableNumbers.slice(0, rowsForThisColumn.length).sort((a, b) => a - b);
-    
-    rowsForThisColumn.forEach((row, index) => {
-      ticket[row][col] = numbersForColumn[index];
-    });
+    numbers.sort((a, b) => a - b);
+
+    // clear column
+    for (let row = 0; row < 3; row++) ticket[row][col] = null;
+
+    // place back starting from the top
+    for (let row = 0; row < numbers.length; row++) {
+      ticket[row][col] = numbers[row];
+    }
   }
 
   return ticket;
@@ -100,4 +68,39 @@ function shuffle(arr) {
   return arr;
 }
 
-module.exports = { generateTicket }; 
+function generateTickets(numTickets = 1) {
+  numTickets = Math.min(Math.max(numTickets, 1), 6); // Clamp between 1 and 6
+
+  const tickets = [];
+  const usedNumbers = new Set();
+  const MAX_ATTEMPTS_PER_TICKET = 2000;
+
+  for (let i = 0; i < numTickets; i++) {
+    let attempts = 0;
+    let ticket;
+
+    while (attempts < MAX_ATTEMPTS_PER_TICKET) {
+      ticket = generateTicket();
+      const numbers = ticket.flat().filter(Boolean);
+      const hasDuplicate = numbers.some((n) => usedNumbers.has(n));
+
+      if (!hasDuplicate) {
+        // Accept this ticket and mark its numbers as used
+        numbers.forEach((n) => usedNumbers.add(n));
+        tickets.push(ticket);
+        break;
+      }
+
+      attempts++;
+    }
+
+    // If we could not generate a valid ticket after many attempts, restart the whole process
+    if (attempts === MAX_ATTEMPTS_PER_TICKET) {
+      return generateTickets(numTickets); // Recursive retry (very unlikely for ≤6 tickets)
+    }
+  }
+
+  return tickets;
+}
+
+module.exports = { generateTicket, generateTickets }; 

@@ -17,7 +17,17 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   },
   transports: ["websocket"],
-  allowEIO3: false
+  allowEIO3: false,
+  // Extended timeout settings for long games
+  pingTimeout: 60000, // 60 seconds
+  pingInterval: 25000, // 25 seconds
+  // Keep connections alive for 30 minutes
+  connectTimeout: 30 * 60 * 1000, // 30 minutes
+  // Allow time for reconnection
+  maxHttpBufferSize: 1e6,
+  // Heartbeat settings
+  heartbeatTimeout: 30000,
+  heartbeatInterval: 10000
 });
 
 const PORT = process.env.PORT || 4000;
@@ -29,6 +39,16 @@ app.get('/', (_, res) => res.send('Tambola server is running'));
 
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
+  
+  // Send heartbeat to keep connection alive
+  const heartbeatInterval = setInterval(() => {
+    socket.emit('heartbeat', { timestamp: Date.now() });
+  }, 30000); // Every 30 seconds
+  
+  // Handle heartbeat response
+  socket.on('heartbeat_response', () => {
+    // Client is alive, reset any disconnect timers
+  });
 
   socket.on('create_game', ({ pricePerTicket, prizes, numTickets = 1 }, cb) => {
     try {
@@ -51,12 +71,29 @@ io.on('connection', (socket) => {
 
   socket.on('join_game', ({ gameId, playerName, numTickets = 1 }, cb) => {
     try {
-      const { tickets, players } = gameManager.joinGame(gameId, socket.id, playerName, numTickets);
+      const result = gameManager.joinGame(gameId, socket.id, playerName, numTickets);
+      const { tickets, players, reconnected, wasHost } = result;
       socket.join(gameId);
       
       // Get the game to notify all players
       const game = gameManager.getGame(gameId);
       if (game) {
+        if (reconnected) {
+          // Notify all players about reconnection
+          if (wasHost) {
+            io.to(gameId).emit('host_reconnected', { 
+              hostName: playerName,
+              timestamp: Date.now()
+            });
+          } else {
+            io.to(gameId).emit('player_reconnected', { 
+              playerName,
+              playerId: socket.id,
+              timestamp: Date.now()
+            });
+          }
+        }
+        
         // Notify each player with updated player list
         Object.keys(game.players).forEach(playerId => {
           const playerList = gameManager.getPlayersForUser(gameId, playerId);
@@ -64,7 +101,7 @@ io.on('connection', (socket) => {
         });
       }
       
-      cb({ status: 'ok', tickets, players });
+      cb({ status: 'ok', tickets, players, reconnected, wasHost });
     } catch (err) {
       cb({ status: 'error', message: err.message });
     }
@@ -167,9 +204,47 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
+    console.log('User disconnected', socket.id, 'Reason:', reason);
+    
+    // Clear heartbeat interval
+    clearInterval(heartbeatInterval);
+    
+    // Get game info before removing player
+    const gameId = gameManager.playerGameMap.get(socket.id);
+    const game = gameId ? gameManager.getGame(gameId) : null;
+    const wasHost = game && game.host === socket.id;
+    
+    // Remove player and handle disconnection
     gameManager.removePlayer(socket.id);
-    console.log('User disconnected', socket.id);
+    
+    // Notify remaining players about disconnection
+    if (game && gameId) {
+      if (wasHost) {
+        // Host disconnected - notify all players
+        io.to(gameId).emit('host_disconnected', { 
+          reason: 'Host has disconnected',
+          timestamp: Date.now(),
+          gameWillEndIn: game.started ? 10 * 60 * 1000 : 0 // 10 minutes if game started, immediate if not
+        });
+      } else {
+        // Regular player disconnected - notify remaining players
+        const playerName = game.players[socket.id]?.name || 'Unknown Player';
+        io.to(gameId).emit('player_disconnected', { 
+          playerName,
+          playerId: socket.id,
+          timestamp: Date.now()
+        });
+        
+        // Update player list for remaining players
+        Object.keys(game.players).forEach(playerId => {
+          if (playerId !== socket.id) {
+            const playerList = gameManager.getPlayersForUser(gameId, playerId);
+            io.to(playerId).emit('players_updated', { players: playerList });
+          }
+        });
+      }
+    }
   });
 });
 

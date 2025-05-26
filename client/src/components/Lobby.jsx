@@ -35,7 +35,21 @@ function Lobby({ onStart }) {
 
   const connect = () => {
     if (!socketRef.current) {
-      socketRef.current = io(SERVER_URL, { transports: ['websocket'], upgrade: false });
+      socketRef.current = io(SERVER_URL, { 
+        transports: ['websocket'], 
+        upgrade: false,
+        timeout: 60000, // 60 seconds
+        forceNew: false,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 10,
+        maxReconnectionAttempts: 10
+      });
+
+      // Handle heartbeat to keep connection alive
+      socketRef.current.on('heartbeat', () => {
+        socketRef.current.emit('heartbeat_response');
+      });
 
       socketRef.current.on('players_updated', ({ players }) => {
         setPlayers(players);
@@ -48,6 +62,51 @@ function Lobby({ onStart }) {
           isHost: isHostRef.current, 
           tickets: ticketsRef.current 
         });
+      });
+
+      // Handle disconnection notifications
+      socketRef.current.on('host_disconnected', ({ reason, gameWillEndIn }) => {
+        if (gameWillEndIn > 0) {
+          alert(`⚠️ ${reason}. Game will end in ${Math.round(gameWillEndIn / 60000)} minutes if host doesn't reconnect.`);
+        } else {
+          alert(`⚠️ ${reason}. Game has been cancelled.`);
+        }
+      });
+
+      socketRef.current.on('player_disconnected', ({ playerName }) => {
+        console.log(`Player ${playerName} disconnected`);
+      });
+
+      socketRef.current.on('host_reconnected', ({ hostName }) => {
+        alert(`✅ Host ${hostName} has reconnected! Game continues.`);
+      });
+
+      socketRef.current.on('player_reconnected', ({ playerName }) => {
+        console.log(`Player ${playerName} reconnected`);
+      });
+
+      // Handle connection issues
+      socketRef.current.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+        setError('Connection failed. Please check your internet connection.');
+      });
+
+      socketRef.current.on('disconnect', (reason) => {
+        console.log('Disconnected:', reason);
+        if (reason === 'io server disconnect') {
+          // Server disconnected the client, try to reconnect
+          socketRef.current.connect();
+        }
+      });
+
+      socketRef.current.on('reconnect', (attemptNumber) => {
+        console.log('Reconnected after', attemptNumber, 'attempts');
+        setError(null);
+      });
+
+      socketRef.current.on('reconnect_error', (error) => {
+        console.error('Reconnection failed:', error);
+        setError('Reconnection failed. Please refresh the page.');
       });
     }
   };
@@ -134,12 +193,12 @@ function Lobby({ onStart }) {
 
   // Main screen - only 2 buttons
   if (screen === 'main') {
-    return (
+  return (
       <div className="space-y-8 max-w-md mx-auto p-6 text-center">
         <h1 className="text-4xl font-extrabold text-purple-800 mb-8" style={{ fontFamily: 'Fredoka One' }}>
           🎯 TAMBOLA 🎯
         </h1>
-        
+
         <div className="space-y-4">
           <button 
             className="btn-primary w-full text-xl py-4"
@@ -164,7 +223,7 @@ function Lobby({ onStart }) {
     return (
       <div className="space-y-6 max-w-md mx-auto p-4">
         <div className="flex items-center space-x-3 mb-6">
-          <button 
+          <button
             className="text-purple-700 text-2xl"
             onClick={() => setScreen('main')}
           >
@@ -305,7 +364,7 @@ function Lobby({ onStart }) {
           <h2 className="text-2xl font-extrabold text-purple-800" style={{ fontFamily: 'Fredoka One' }}>
             Game Details
           </h2>
-        </div>
+            </div>
 
         <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
           <h3 className="font-bold text-blue-800 mb-3">💰 Game Info</h3>
@@ -318,8 +377,8 @@ function Lobby({ onStart }) {
               <span>Players joined:</span>
               <span className="font-bold">{gameDetails.playerCount}</span>
             </div>
+            </div>
           </div>
-        </div>
 
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
           <h3 className="font-bold text-yellow-800 mb-3">🏆 Prize Money</h3>
@@ -409,10 +468,10 @@ function Lobby({ onStart }) {
             <p className="text-blue-700 font-bold">Waiting for host to start...</p>
           </div>
         )}
-
+          
         {/* Players list with ticket counts */}
-        <div>
-          <p className="font-bold text-purple-800 mb-2">Players in game:</p>
+          <div>
+            <p className="font-bold text-purple-800 mb-2">Players in game:</p>
           <div className="space-y-2">
             {players.map((player, idx) => (
               <div key={idx} className="flex justify-between items-center bg-purple-100 rounded-lg px-3 py-2">
@@ -441,8 +500,8 @@ function Lobby({ onStart }) {
             {gameCode}
           </p>
         </div>
-      </div>
-    );
+    </div>
+  );
   }
 
   return null;

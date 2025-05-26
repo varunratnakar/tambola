@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const { generateTicket } = require('./ticket');
+const { generateTicket, generateTickets } = require('./ticket');
 
 class GameManager {
   constructor(io) {
@@ -57,9 +57,15 @@ class GameManager {
       const oldSocketId = Object.keys(game.players).find(id => game.players[id] === existingPlayer);
       if (oldSocketId) {
         // Move player data to new socket ID
-        game.players[socketId] = { ...existingPlayer, disconnected: false };
+        game.players[socketId] = { ...existingPlayer, disconnected: false, reconnectedAt: Date.now() };
         delete game.players[oldSocketId];
         this.playerGameMap.set(socketId, gameId);
+        
+        // If this was the host reconnecting, restore host status
+        if (oldSocketId === game.host) {
+          game.host = socketId;
+          delete game.hostDisconnectedAt;
+        }
         
         // Return existing tickets and players
         const players = Object.entries(game.players)
@@ -68,16 +74,13 @@ class GameManager {
             name: player.name,
             ticketCount: player.tickets.length
           }));
-        return { tickets: existingPlayer.tickets, players };
+        return { tickets: existingPlayer.tickets, players, reconnected: true, wasHost: oldSocketId === game.host };
       }
     }
     
     if (game.started) throw new Error('Game already started');
 
-    const tickets = [];
-    for (let i = 0; i < Math.min(numTickets, 6); i++) { // Max 6 tickets per player
-      tickets.push(generateTicket());
-    }
+    const tickets = generateTickets(Math.min(numTickets, 6));
     
     game.players[socketId] = {
       name: playerName,
@@ -181,38 +184,38 @@ class GameManager {
     // Scan all tickets to find a valid claim
     for (let ticketIndex = 0; ticketIndex < tickets.length; ticketIndex++) {
       const ticket = tickets[ticketIndex];
-      const flatTicketNumbers = ticket.flat().filter(Boolean);
+    const flatTicketNumbers = ticket.flat().filter(Boolean);
 
-      if (claimType === 'line') {
-        const lineIndex = lines?.[0] ?? 0;
-        const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
-        const lineType = lineTypes[lineIndex];
-        
-        if (game.winners[lineType]) {
+    if (claimType === 'line') {
+      const lineIndex = lines?.[0] ?? 0;
+      const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
+      const lineType = lineTypes[lineIndex];
+      
+      if (game.winners[lineType]) {
           continue; // This prize already claimed, check next ticket
-        }
-        
-        const lineNumbers = ticket[lineIndex].filter(Boolean);
-        const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
-        if (allCalled) {
-          game.winners[lineType] = player.name;
+      }
+      
+      const lineNumbers = ticket[lineIndex].filter(Boolean);
+      const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n));
+      if (allCalled) {
+        game.winners[lineType] = player.name;
           return { valid: true, lineType, playerName: player.name, ticketIndex };
-        }
-      } else if (claimType === 'corners') {
-        if (game.winners.corners) {
+      }
+    } else if (claimType === 'corners') {
+      if (game.winners.corners) {
           continue; // Prize already claimed, check next ticket
-        }
-        
-        // Corner positions: [0,0], [0,8], [2,0], [2,8]
-        const cornerNumbers = [
-          ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
-        ].filter(Boolean);
-        
-        const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
-        if (allCalled) {
-          game.winners.corners = player.name;
+      }
+      
+      // Corner positions: [0,0], [0,8], [2,0], [2,8]
+      const cornerNumbers = [
+        ticket[0][0], ticket[0][8], ticket[2][0], ticket[2][8]
+      ].filter(Boolean);
+      
+      const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n));
+      if (allCalled) {
+        game.winners.corners = player.name;
           return { valid: true, playerName: player.name, ticketIndex };
-        }
+      }
       } else if (claimType === 'house') {
         if (game.winners.house) {
           continue; // Prize already claimed, check next ticket
@@ -267,20 +270,35 @@ class GameManager {
     this.playerGameMap.delete(socketId);
     this.io.to(gameId).emit('player_left', { playerId: socketId });
 
-    // Only end game if host left AND game hasn't started, or if ALL players are disconnected for more than 5 minutes
-    if (socketId === game.host && !game.started) {
-      // Host left before game started - cancel immediately
-      this.games.delete(gameId);
-      this.io.to(gameId).emit('game_cancelled', { reason: 'Host left the game' });
-    } else if (socketId === game.host && game.started) {
-      // Host left during game - keep game running for 10 minutes
-      setTimeout(() => {
-        const currentGame = this.games.get(gameId);
-        if (currentGame && currentGame.players[socketId]?.disconnected) {
-          this.games.delete(gameId);
-          this.io.to(gameId).emit('game_cancelled', { reason: 'Host disconnected for too long' });
-        }
-      }, 10 * 60 * 1000); // 10 minutes
+    // Handle host disconnection
+    if (socketId === game.host) {
+      if (!game.started) {
+        // Host left before game started - cancel immediately
+        this.games.delete(gameId);
+        this.io.to(gameId).emit('game_cancelled', { reason: 'Host left the game' });
+        // Clean up all player mappings
+        Object.keys(game.players).forEach(playerId => {
+          this.playerGameMap.delete(playerId);
+        });
+      } else {
+        // Host left during game - keep game running for 10 minutes
+        game.hostDisconnectedAt = Date.now();
+        
+        // Set a timer to end the game if host doesn't reconnect
+        setTimeout(() => {
+          const currentGame = this.games.get(gameId);
+          if (currentGame && currentGame.players[socketId]?.disconnected) {
+            this.games.delete(gameId);
+            this.io.to(gameId).emit('game_cancelled', { 
+              reason: 'Host disconnected for too long (10 minutes)' 
+            });
+            // Clean up all player mappings
+            Object.keys(currentGame.players).forEach(playerId => {
+              this.playerGameMap.delete(playerId);
+            });
+          }
+        }, 10 * 60 * 1000); // 10 minutes
+      }
     }
     
     // Clean up completely disconnected games after 30 minutes
