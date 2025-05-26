@@ -146,7 +146,7 @@ function Lobby({ onStart }) {
     setError(null);
     connect();
     
-    const code = gameCode.trim().toLowerCase();
+    const code = gameCode.trim().toUpperCase();
     socketRef.current.emit('get_game_details', { gameId: code }, (res) => {
       setLoading(false);
       if (res.status === 'ok') {
@@ -167,7 +167,7 @@ function Lobby({ onStart }) {
     setLoading(true);
     setError(null);
     
-    const code = gameCode.trim().toLowerCase();
+    const code = gameCode.trim().toUpperCase();
     socketRef.current.emit('join_game', { 
       gameId: code, 
       playerName: playerName.trim(),

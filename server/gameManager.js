@@ -60,7 +60,7 @@ class GameManager {
   }
 
   joinGame(gameId, socketId, playerName, numTickets = 1) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     
     // Check if this is a reconnection (player with same name exists)
@@ -117,14 +117,14 @@ class GameManager {
   }
 
   startGame(gameId, socketId) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can start the game');
     game.started = true;
   }
 
   cancelGame(gameId, socketId) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can cancel the game');
     
@@ -137,7 +137,7 @@ class GameManager {
   }
 
   drawNumber(gameId, socketId, chosenNumber = null) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (socketId !== game.host) throw new Error('Only host can draw numbers');
     if (!game.started) throw new Error('Game not started');
@@ -166,7 +166,7 @@ class GameManager {
   }
 
   endGame(gameId, reason = 'Game ended') {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) return;
     
     // Notify all players that the game has ended
@@ -187,7 +187,7 @@ class GameManager {
   }
 
   validateClaim(gameId, socketId, claimType, lines) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     const player = game.players[socketId];
     if (!player) throw new Error('Player not in game');
@@ -335,11 +335,11 @@ class GameManager {
   }
 
   getGame(gameId) {
-    return this.games.get(gameId?.toLowerCase?.() || gameId);
+    return this.games.get(gameId?.toUpperCase?.() || gameId);
   }
 
   getGameDetails(gameId) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) throw new Error('Invalid game ID');
     if (game.started) throw new Error('Game already started');
     
@@ -356,7 +356,7 @@ class GameManager {
   }
 
   getPlayersForUser(gameId, socketId) {
-    const game = this.games.get(gameId?.toLowerCase?.() || gameId);
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) return [];
     
     // Return all players with ticket counts (exclude host and disconnected players)
