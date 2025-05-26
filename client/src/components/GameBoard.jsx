@@ -85,7 +85,7 @@ function TicketGrid({ ticket, marked, onCell, latestNumber, ticketIndex, totalTi
   );
 }
 
-function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, connectionStatus, hostDisconnected }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, connectionStatus, hostDisconnected, gameOptions }) {
   if (!tickets || tickets.length === 0) return null;
 
   const isDisabled = connectionStatus !== 'connected' || hostDisconnected;
@@ -189,13 +189,40 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
             <div className="prize-amount">₹{gamePrizes.corners}</div>
           </button>
           
+          {gameOptions.enableEarly5 && (
+            <button 
+              className={`prize-btn early5-btn ${winners.early5 ? 'claimed' : ''} ${isDisabled ? 'disabled' : ''}`}
+              onClick={() => !isDisabled && handleClaim('early5')}
+              disabled={!!winners.early5 || isDisabled}
+            >
+              <div className="prize-text">Early 5</div>
+              <div className="prize-amount">₹{gamePrizes.early5}</div>
+            </button>
+          )}
+          
           <button 
-            className={`prize-btn house-btn ${winners.house ? 'claimed' : ''} ${isDisabled ? 'disabled' : ''}`}
+            className={`prize-btn house-btn ${
+              gameOptions.enableMultipleHouses 
+                ? (winners.house.length >= gameOptions.maxHouseWinners ? 'claimed' : '') 
+                : (winners.house.length > 0 ? 'claimed' : '')
+            } ${isDisabled ? 'disabled' : ''}`}
             onClick={() => !isDisabled && handleClaim('house')}
-            disabled={!!winners.house || isDisabled}
+            disabled={
+              gameOptions.enableMultipleHouses 
+                ? (winners.house.length >= gameOptions.maxHouseWinners || isDisabled || winners.house.some(w => w.playerName === 'You'))
+                : (winners.house.length > 0 || isDisabled)
+            }
           >
-            <div className="prize-text">Full House</div>
-            <div className="prize-amount">₹{gamePrizes.house}</div>
+            <div className="prize-text">
+              {gameOptions.enableMultipleHouses && winners.house.length > 0 
+                ? `Full House #${winners.house.length + 1}` 
+                : 'Full House'}
+            </div>
+            <div className="prize-amount">
+              {gameOptions.enableMultipleHouses && winners.house.length > 0 
+                ? `₹${Math.floor(gamePrizes.house * Math.pow(gameOptions.houseReductionPercent / 100, winners.house.length))}`
+                : `₹${gamePrizes.house}`}
+            </div>
           </button>
         </div>
       </div>
@@ -218,18 +245,26 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   
   // Prize and winner tracking
   const [gamePrizes, setGamePrizes] = useState({
-    topLine: 100,
-    middleLine: 100,
-    bottomLine: 100,
-    corners: 150,
-    house: 500
+    topLine: 0,
+    middleLine: 0,
+    bottomLine: 0,
+    corners: 0,
+    house: 0,
+    early5: 0
   });
   const [winners, setWinners] = useState({
     topLine: null,
     middleLine: null,
     bottomLine: null,
     corners: null,
-    house: null
+    house: [],
+    early5: null
+  });
+  const [gameOptions, setGameOptions] = useState({
+    enableEarly5: false,
+    enableMultipleHouses: false,
+    maxHouseWinners: 3,
+    houseReductionPercent: 50
   });
   const [myWinnings, setMyWinnings] = useState([]);
   const [pricePerTicket, setPricePerTicket] = useState(50);
@@ -258,17 +293,28 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     }
   }, [socket, gameId]);
 
-  // // Announce game start
-  // useEffect(() => {
-  //   if (gameStarted && voiceEnabled && voiceService.isSupported()) {
-  //     // Only announce once when game starts
-  //     const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
-  //     if (!hasAnnounced) {
-  //       voiceService.announceEvent('Welcome to Tambola! The game has started. Good luck everyone!');
-  //       sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
-  //     }
-  //   }
-  // }, [gameStarted, voiceEnabled, gameId]);
+  // Announce game start
+  useEffect(() => {
+    if (gameStarted && voiceEnabled && voiceService.isSupported()) {
+      // Only announce once when game starts
+      const hasAnnounced = sessionStorage.getItem(`game-start-announced-${gameId}`);
+      if (!hasAnnounced) {
+        voiceService.announceEvent('Welcome to Tambola! The game has started. Good luck everyone!');
+        sessionStorage.setItem(`game-start-announced-${gameId}`, 'true');
+      }
+    }
+  }, [gameStarted, voiceEnabled, gameId]);
+
+  // DEBUG – remove later
+  useEffect(() => {
+    console.log('GB props:', { gameId, isHost, initialTickets });
+    console.log('tickets state:', tickets);
+    console.log('socket in GameBoard:', socket);
+    if (socket) {
+      console.log('socket id:', socket.id);
+      window.socket = socket;            // expose for manual testing
+    }
+  }, [initialTickets, tickets]);
 
   useEffect(() => {
     // Handle heartbeat to keep connection alive
@@ -340,7 +386,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       }
     };
     
-    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount }) => {
+    const onClaimSuccess = ({ playerId, playerName, prizeMessage, claimType, lineIndex, prizeAmount, housePosition }) => {
       alert(`🎉 Amazing! ${playerName} won ${prizeMessage}! 🎉`);
       
       // Announce the win with voice
@@ -353,6 +399,11 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
         const lineTypes = ['topLine', 'middleLine', 'bottomLine'];
         const lineType = lineTypes[lineIndex || 0];
         setWinners(prev => ({ ...prev, [lineType]: playerName }));
+      } else if (claimType === 'house') {
+        setWinners(prev => ({
+          ...prev,
+          house: [...prev.house, { playerName, position: housePosition, prizeAmount }]
+        }));
       } else {
         setWinners(prev => ({ ...prev, [claimType]: playerName }));
       }
@@ -387,10 +438,15 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       setCancelReason(reason);
     };
 
-    const onGameInfo = ({ prizes, winners: gameWinners, pricePerTicket: gamePrice }) => {
+    const onGameInfo = ({ prizes, winners: gameWinners, pricePerTicket: gamePrice, options }) => {
       if (prizes) setGamePrizes(prizes);
       if (gameWinners) setWinners(gameWinners);
       if (gamePrice) setPricePerTicket(gamePrice);
+      if (options) setGameOptions(options);
+    };
+
+    const onPrizesUpdated = ({ prizes }) => {
+      if (prizes) setGamePrizes(prizes);
     };
 
     socket.on('number_drawn', onNumber);
@@ -399,6 +455,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     socket.on('game_completed', onGameCompleted);
     socket.on('game_cancelled', onGameCancelled);
     socket.on('game_info', onGameInfo);
+    socket.on('prizes_updated', onPrizesUpdated);
     
     return () => {
       socket.off('heartbeat');
@@ -413,6 +470,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('game_completed', onGameCompleted);
       socket.off('game_cancelled', onGameCancelled);
       socket.off('game_info', onGameInfo);
+      socket.off('prizes_updated', onPrizesUpdated);
     };
   }, [socket]);
 
@@ -889,6 +947,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
                 }}
                 connectionStatus={connectionStatus}
                 hostDisconnected={hostDisconnected}
+                gameOptions={gameOptions}
               />
             )
           )}

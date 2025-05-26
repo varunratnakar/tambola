@@ -1,4 +1,4 @@
-const { generateTicket } = require('./ticket');
+const { generateTicket, generateTickets } = require('./ticket');
 
 class GameManager {
   constructor(io) {
@@ -7,7 +7,7 @@ class GameManager {
     this.playerGameMap = new Map(); // socketId -> gameId
   }
 
-  createGame(hostSocketId, pricePerTicket = 50, prizes = {}, numTickets = 1) {
+  createGame(hostSocketId, pricePerTicket = 50, prizes = {}, numTickets = 1, gameOptions = {}) {
     // Generate 3-letter game ID
     const generateGameId = () => {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -31,19 +31,28 @@ class GameManager {
       remainingNumbers: Array.from({ length: 90 }, (_, i) => i + 1),
       started: false,
       pricePerTicket,
+      totalTicketsSold: 0, // Track total tickets sold
       prizes: {
-        topLine: prizes.topLine || 100,
-        middleLine: prizes.middleLine || 100,
-        bottomLine: prizes.bottomLine || 100,
-        corners: prizes.corners || 150,
-        house: prizes.house || 500,
+        topLine: 0,
+        middleLine: 0,
+        bottomLine: 0,
+        corners: 0,
+        house: 0,
+        early5: 0,
       },
       winners: {
         topLine: null,
         middleLine: null,
         bottomLine: null,
         corners: null,
-        house: null,
+        house: [], // Array to store multiple house winners
+        early5: null,
+      },
+      options: {
+        enableEarly5: gameOptions.enableEarly5 || false,
+        enableMultipleHouses: gameOptions.enableMultipleHouses || false,
+        maxHouseWinners: gameOptions.maxHouseWinners || 3,
+        houseReductionPercent: gameOptions.houseReductionPercent || 50, // Each subsequent house gets 50% of previous
       },
     };
     // Host doesn't get tickets - they just manage the game
@@ -80,7 +89,7 @@ class GameManager {
           delete game.hostDisconnectedAt;
         }
         
-        // Return existing tickets and players
+        // Return existing tickets and players (no need to recalculate prizes for reconnection)
         const players = Object.entries(game.players)
           .filter(([socketId, player]) => socketId !== game.host && !player.disconnected)
           .map(([_, player]) => ({
@@ -93,10 +102,8 @@ class GameManager {
     
     if (game.started) throw new Error('Game already started');
 
-    const tickets = [];
-    for (let i = 0; i < Math.min(numTickets, 6); i++) { // Max 6 tickets per player
-      tickets.push(generateTicket());
-    }
+    // Use the new strip-based generator for better ticket distribution
+    const tickets = generateTickets(Math.min(numTickets, 6)); // Max 6 tickets per player
     
     game.players[socketId] = {
       name: playerName,
@@ -105,6 +112,10 @@ class GameManager {
       disconnected: false,
     };
     this.playerGameMap.set(socketId, gameId);
+    
+    // Update total tickets sold and recalculate prizes
+    game.totalTicketsSold += numTickets;
+    this.calculatePrizes(game);
     
     // Return players with ticket counts (exclude host and disconnected players)
     const players = Object.entries(game.players)
@@ -232,17 +243,50 @@ class GameManager {
         game.winners.corners = player.name;
           return { valid: true, playerName: player.name, ticketIndex };
       }
-      } else if (claimType === 'house') {
-        if (game.winners.house) {
-          continue; // Prize already claimed, check next ticket
+    } else if (claimType === 'early5') {
+      if (!game.options.enableEarly5 || game.winners.early5) {
+        continue; // Early 5 not enabled or already claimed
+      }
+      
+      const calledNumbers = flatTicketNumbers.filter(n => game.drawnNumbers.includes(n));
+      if (calledNumbers.length >= 5) {
+        game.winners.early5 = player.name;
+        return { valid: true, playerName: player.name, ticketIndex };
+      }
+    } else if (claimType === 'house') {
+      // Check if multiple houses are allowed and if limit is reached
+      if (!game.options.enableMultipleHouses && game.winners.house.length > 0) {
+        continue; // Multiple houses not enabled and one already claimed
+      }
+      if (game.winners.house.length >= game.options.maxHouseWinners) {
+        continue; // Maximum house winners reached
+      }
+      
+      // Check if this player already won a house
+      const playerAlreadyWonHouse = game.winners.house.some(winner => winner.playerName === player.name);
+      if (playerAlreadyWonHouse) {
+        continue; // Player already won a house
+      }
+      
+      const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
+      if (allCalled) {
+        const housePosition = game.winners.house.length + 1;
+        let prizeAmount = game.prizes.house;
+        
+        // Calculate reduced prize for subsequent houses
+        for (let i = 1; i < housePosition; i++) {
+          prizeAmount = Math.floor(prizeAmount * (game.options.houseReductionPercent / 100));
         }
         
-        const allCalled = flatTicketNumbers.every((n) => game.drawnNumbers.includes(n));
-        if (allCalled) {
-          game.winners.house = player.name;
-          return { valid: true, playerName: player.name, ticketIndex };
-        }
+        game.winners.house.push({
+          playerName: player.name,
+          position: housePosition,
+          prizeAmount: prizeAmount
+        });
+        
+        return { valid: true, playerName: player.name, ticketIndex, housePosition, prizeAmount };
       }
+    }
     }
 
     // No valid claim found in any ticket
@@ -260,14 +304,82 @@ class GameManager {
         return { valid: false, reason: 'Corners already claimed' };
       }
       return { valid: false, reason: 'Corners not complete on any ticket' };
-    } else if (claimType === 'house') {
-      if (game.winners.house) {
-        return { valid: false, reason: 'House already claimed' };
+    } else if (claimType === 'early5') {
+      if (!game.options.enableEarly5) {
+        return { valid: false, reason: 'Early 5 not enabled for this game' };
       }
-      return { valid: false, reason: 'House not complete on any ticket' };
+      if (game.winners.early5) {
+        return { valid: false, reason: 'Early 5 already claimed' };
+      }
+      return { valid: false, reason: 'Need at least 5 numbers called on any ticket' };
+    } else if (claimType === 'house') {
+      if (!game.options.enableMultipleHouses && game.winners.house.length > 0) {
+        return { valid: false, reason: 'Full House already claimed' };
+      }
+      if (game.winners.house.length >= game.options.maxHouseWinners) {
+        return { valid: false, reason: 'Maximum Full House winners reached' };
+      }
+      const playerAlreadyWonHouse = game.winners.house.some(winner => winner.playerName === player.name);
+      if (playerAlreadyWonHouse) {
+        return { valid: false, reason: 'You already won a Full House' };
+      }
+      return { valid: false, reason: 'Full House not complete on any ticket' };
     }
     
     return { valid: false, reason: 'Invalid claim type' };
+  }
+
+  calculatePrizes(game) {
+    const totalRevenue = game.totalTicketsSold * game.pricePerTicket;
+    
+    // Prize distribution percentages
+    const distribution = {
+      topLine: 0.15,      // 15%
+      middleLine: 0.15,   // 15%
+      bottomLine: 0.15,   // 15%
+      corners: 0.10,      // 10%
+      house: 0.35,        // 35%
+      early5: 0.05,       // 5%
+      // Remaining 5% goes to host as commission
+    };
+    
+    // Calculate base prizes
+    game.prizes.topLine = Math.floor(totalRevenue * distribution.topLine);
+    game.prizes.middleLine = Math.floor(totalRevenue * distribution.middleLine);
+    game.prizes.bottomLine = Math.floor(totalRevenue * distribution.bottomLine);
+    game.prizes.corners = Math.floor(totalRevenue * distribution.corners);
+    game.prizes.house = Math.floor(totalRevenue * distribution.house);
+    
+    // Only set Early 5 prize if enabled
+    if (game.options.enableEarly5) {
+      game.prizes.early5 = Math.floor(totalRevenue * distribution.early5);
+    } else {
+      game.prizes.early5 = 0;
+      // Add Early 5 percentage to house if not enabled
+      game.prizes.house += Math.floor(totalRevenue * distribution.early5);
+    }
+  }
+
+  checkGameCompletion(gameId) {
+    const game = this.games.get(gameId?.toUpperCase?.() || gameId);
+    if (!game) return false;
+
+    // Check if all prizes are claimed
+    const allPrizesClaimed = 
+      game.winners.topLine && 
+      game.winners.middleLine && 
+      game.winners.bottomLine && 
+      game.winners.corners && 
+      (!game.options.enableEarly5 || game.winners.early5) &&
+      (game.options.enableMultipleHouses ? 
+        game.winners.house.length >= game.options.maxHouseWinners : 
+        game.winners.house.length > 0);
+
+    if (allPrizesClaimed) {
+      this.endGame(gameId, 'All prizes have been claimed!');
+      return true;
+    }
+    return false;
   }
 
   removePlayer(socketId) {
@@ -351,7 +463,10 @@ class GameManager {
     return {
       pricePerTicket: game.pricePerTicket,
       prizes: game.prizes,
-      playerCount
+      playerCount,
+      totalTicketsSold: game.totalTicketsSold,
+      totalRevenue: game.totalTicketsSold * game.pricePerTicket,
+      options: game.options
     };
   }
 

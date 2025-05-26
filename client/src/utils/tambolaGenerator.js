@@ -1,5 +1,5 @@
-// Generates Tambola tickets using the strip-based algorithm
-// This ensures proper distribution of numbers across tickets and follows official Tambola rules
+// tambola_generator.js
+// Generates a strip of 6 Tambola tickets (3×9) using numbers 1–90 under standard rules.
 
 /**
  * Generate a full strip of 6 tickets.
@@ -79,6 +79,17 @@ function generateTambolaStrip() {
 }
 
 /**
+ * Shuffle an array in-place using Fisher–Yates.
+ */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--; ) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
  * Assigns positions in a 3×9 grid for one ticket,
  * given the number of entries needed in each column,
  * ensuring each row has exactly 5 entries.
@@ -120,37 +131,18 @@ const rowCombosMap = {
 function getRowCombos(n) { return rowCombosMap[n] || []; }
 
 /**
- * Shuffle an array in-place using Fisher–Yates.
- */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-/**
- * Generate a single ticket (for backward compatibility)
- * This now uses the strip-based algorithm for better distribution
- */
-function generateTicket() {
-  const strip = generateTambolaStrip();
-  return strip[0]; // Return the first ticket from the strip
-}
-
-/**
- * Generate multiple tickets using the strip-based algorithm
+ * Generate the specified number of tickets by slicing from a full strip
  * @param {number} numTickets - Number of tickets to generate (1-6)
  * @returns {Array<Array<Array<number|null>>>} Array of tickets
  */
-function generateTickets(numTickets = 1) {
+export function generateTickets(numTickets = 1) {
   if (numTickets < 1 || numTickets > 6) {
     throw new Error('Number of tickets must be between 1 and 6');
   }
   
-  const strip = generateTambolaStrip();
-  return strip.slice(0, numTickets);
+  const fullStrip = generateTambolaStrip();
+  return fullStrip.slice(0, numTickets);
 }
 
-module.exports = { generateTicket, generateTickets, generateTambolaStrip }; 
+// Export the main function as well
+export { generateTambolaStrip }; 

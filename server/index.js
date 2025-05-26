@@ -50,9 +50,9 @@ io.on('connection', (socket) => {
     // Client is alive, reset any disconnect timers
   });
 
-  socket.on('create_game', ({ pricePerTicket, prizes, numTickets = 1 }, cb) => {
+  socket.on('create_game', ({ pricePerTicket, numTickets = 1, gameOptions = {} }, cb) => {
     try {
-      const { gameId, tickets, players } = gameManager.createGame(socket.id, pricePerTicket, prizes, numTickets);
+      const { gameId, tickets, players } = gameManager.createGame(socket.id, pricePerTicket, {}, numTickets, gameOptions);
       socket.join(gameId);
       cb({ status: 'ok', gameId, tickets, players });
     } catch (err) {
@@ -62,17 +62,29 @@ io.on('connection', (socket) => {
 
   socket.on('get_game_details', ({ gameId }, cb) => {
     try {
+      console.log(`Getting game details for: ${gameId}`);
       const gameDetails = gameManager.getGameDetails(gameId);
+      console.log(`Game details found for ${gameId}:`, gameDetails);
       cb({ status: 'ok', gameDetails });
     } catch (err) {
-      cb({ status: 'error', message: err.message });
+      console.log(`Error getting game details for ${gameId}:`, err.message);
+      // Provide more helpful error messages
+      if (err.message === 'Invalid game ID') {
+        cb({ status: 'error', message: 'Game not found. It may have been cancelled or expired.' });
+      } else if (err.message === 'Game already started') {
+        cb({ status: 'error', message: 'This game has already started and cannot accept new players.' });
+      } else {
+        cb({ status: 'error', message: err.message });
+      }
     }
   });
 
   socket.on('join_game', ({ gameId, playerName, numTickets = 1 }, cb) => {
     try {
+      console.log(`Player ${playerName} attempting to join game: ${gameId}`);
       const result = gameManager.joinGame(gameId, socket.id, playerName, numTickets);
       const { tickets, players, reconnected, wasHost } = result;
+      console.log(`Player ${playerName} successfully joined game ${gameId}. Reconnected: ${reconnected}`);
       socket.join(gameId);
       
       // Get the game to notify all players
@@ -94,16 +106,29 @@ io.on('connection', (socket) => {
           }
         }
         
-        // Notify each player with updated player list
+        // Notify each player with updated player list and prizes
         Object.keys(game.players).forEach(playerId => {
           const playerList = gameManager.getPlayersForUser(gameId, playerId);
           io.to(playerId).emit('players_updated', { players: playerList });
+          io.to(playerId).emit('prizes_updated', { 
+            prizes: game.prizes, 
+            totalTicketsSold: game.totalTicketsSold,
+            totalRevenue: game.totalTicketsSold * game.pricePerTicket
+          });
         });
       }
       
       cb({ status: 'ok', tickets, players, reconnected, wasHost });
     } catch (err) {
-      cb({ status: 'error', message: err.message });
+      console.log(`Error joining game ${gameId}:`, err.message);
+      // Provide more helpful error messages
+      if (err.message === 'Invalid game ID') {
+        cb({ status: 'error', message: 'Game not found. It may have been cancelled or expired.' });
+      } else if (err.message === 'Game already started') {
+        cb({ status: 'error', message: 'This game has already started and cannot accept new players.' });
+      } else {
+        cb({ status: 'error', message: err.message });
+      }
     }
   });
 
@@ -114,7 +139,8 @@ io.on('connection', (socket) => {
         io.to(socket.id).emit('game_info', { 
           prizes: game.prizes,
           winners: game.winners,
-          pricePerTicket: game.pricePerTicket
+          pricePerTicket: game.pricePerTicket,
+          options: game.options
         });
       }
       cb({ status: 'ok' });
@@ -133,7 +159,8 @@ io.on('connection', (socket) => {
       if (game) {
         io.to(gameId).emit('game_info', { 
           prizes: game.prizes,
-          winners: game.winners 
+          winners: game.winners,
+          options: game.options
         });
       }
       
@@ -164,7 +191,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('claim', ({ gameId, claimType, lines }, cb) => {
-    // claimType: 'line', 'corners', or 'house'
+    // claimType: 'line', 'corners', 'early5', or 'house'
     try {
       const result = gameManager.validateClaim(gameId, socket.id, claimType, lines);
       if (result.valid) {
@@ -181,9 +208,17 @@ io.on('connection', (socket) => {
         } else if (claimType === 'corners') {
           prizeMessage = 'Corners';
           prizeAmount = game.prizes.corners;
+        } else if (claimType === 'early5') {
+          prizeMessage = 'Early 5';
+          prizeAmount = game.prizes.early5;
         } else if (claimType === 'house') {
-          prizeMessage = 'Full House';
-          prizeAmount = game.prizes.house;
+          if (result.housePosition) {
+            prizeMessage = `Full House #${result.housePosition}`;
+            prizeAmount = result.prizeAmount;
+          } else {
+            prizeMessage = 'Full House';
+            prizeAmount = game.prizes.house;
+          }
         }
         
         io.to(gameId).emit('claim_success', { 
@@ -193,8 +228,12 @@ io.on('connection', (socket) => {
           prizeMessage,
           prizeAmount,
           lineIndex,
-          ticketIndex: result.ticketIndex
+          ticketIndex: result.ticketIndex,
+          housePosition: result.housePosition
         });
+        
+        // Check if all prizes are claimed and end game early if so
+        gameManager.checkGameCompletion(gameId);
       } else {
         socket.emit('claim_failed', { reason: result.reason });
       }

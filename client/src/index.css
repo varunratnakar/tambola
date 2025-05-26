@@ -229,7 +229,7 @@
   }
 
   .latest-number-value {
-    font-size: 2rem;
+    font-size: 2.5rem;
     font-weight: bold;
     font-family: 'Fredoka One', cursive;
   }
@@ -258,7 +258,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 0.5rem;
     font-weight: bold;
-    font-size: 0.875rem;
+    font-size: 1.125rem;
     min-width: 2rem;
     text-align: center;
   }
@@ -444,7 +444,7 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     font-weight: bold;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: #2c3e50;
     margin-bottom: 0.5rem;
     font-family: 'Arial', sans-serif;
@@ -465,22 +465,22 @@
   .ticket-latest-number {
     background: linear-gradient(135deg, #ff6b6b, #ee5a24);
     color: white;
-    font-size: 0.875rem;
+    font-size: 1.125rem;
     font-weight: bold;
     padding: 0;
-    border: 3px solid #ffffff;
+    /* border: 3px solid #ffffff; */
     border-radius: 50%;
     text-transform: none;
     letter-spacing: normal;
     justify-self: center;
-    width: 2rem;
-    height: 2rem;
+    width: 2.0rem;
+    height: 2.0rem;
     text-align: center;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+    /* box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4); */
     animation: latestNumberPulse 2s ease-in-out infinite;
     position: relative;
     z-index: 10;
@@ -492,7 +492,7 @@
   }
 
   .ticket-recent-numbers {
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     color: #7f8c8d;
     font-weight: normal;
     text-transform: none;
@@ -600,7 +600,7 @@
       grid-template-columns: repeat(3, 1fr);
       grid-template-areas: 
         "line1 line2 line3"
-        "corners house house";
+        "corners early5 house";
     }
   }
 
@@ -647,12 +647,30 @@
     border-color: #2c3e50;
   }
 
+  .early5-btn {
+    background: #ffffff;
+    color: #2c3e50;
+    border-color: #2c3e50;
+  }
+
   @media (max-width: 640px) {
     .house-btn {
       grid-area: house;
     }
     .special-btn {
       grid-area: corners;
+    }
+    .early5-btn {
+      grid-area: early5;
+    }
+    .line-btn:nth-child(1) {
+      grid-area: line1;
+    }
+    .line-btn:nth-child(2) {
+      grid-area: line2;
+    }
+    .line-btn:nth-child(3) {
+      grid-area: line3;
     }
   }
 
@@ -712,7 +730,7 @@
     }
     
     .latest-number-value {
-      font-size: 1.5rem;
+      font-size: 2rem;
     }
     
     .ticket-cell {
