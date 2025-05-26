@@ -76,7 +76,8 @@ io.on('connection', (socket) => {
       if (game) {
         io.to(socket.id).emit('game_info', { 
           prizes: game.prizes,
-          winners: game.winners 
+          winners: game.winners,
+          pricePerTicket: game.pricePerTicket
         });
       }
       cb({ status: 'ok' });

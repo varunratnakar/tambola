@@ -151,6 +151,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     house: null
   });
   const [myWinnings, setMyWinnings] = useState([]);
+  const [pricePerTicket, setPricePerTicket] = useState(50);
   
   // Auto-draw functionality for host
   const [autoDrawEnabled, setAutoDrawEnabled] = useState(false);
@@ -220,9 +221,10 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       setCancelReason(reason);
     };
 
-    const onGameInfo = ({ prizes, winners: gameWinners }) => {
+    const onGameInfo = ({ prizes, winners: gameWinners, pricePerTicket: gamePrice }) => {
       if (prizes) setGamePrizes(prizes);
       if (gameWinners) setWinners(gameWinners);
+      if (gamePrice) setPricePerTicket(gamePrice);
     };
 
     socket.on('number_drawn', onNumber);
@@ -409,21 +411,55 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       )}
 
       {/* My Winnings Display - Only show when game is completed */}
-      {!isHost && myWinnings.length > 0 && gameCompleted && (
+      {!isHost && gameCompleted && (
         <div className="bg-green-100 border-2 border-green-400 rounded-lg p-3 mx-4 mt-4">
-          <h3 className="font-bold text-green-800 mb-2">🏆 Your Winnings:</h3>
+          <h3 className="font-bold text-green-800 mb-2">💰 Your Game Summary:</h3>
           <div className="space-y-1">
-            {myWinnings.map((winning, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <span className="text-green-700">{winning.prize}</span>
-                <span className="font-bold text-green-800">₹{winning.amount}</span>
-              </div>
-            ))}
+            {myWinnings.length > 0 ? (
+              <>
+                {myWinnings.map((winning, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-sm">
+                    <span className="text-green-700">{winning.prize}</span>
+                    <span className="font-bold text-green-800">₹{winning.amount}</span>
+                  </div>
+                ))}
+                <div className="border-t border-green-300 pt-1 mt-2">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-green-700">Total Winnings:</span>
+                    <span className="font-bold text-green-800">₹{myWinnings.reduce((sum, w) => sum + w.amount, 0)}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-600 italic">No prizes won</div>
+            )}
+            
+            {/* Cost calculation */}
             <div className="border-t border-green-300 pt-1 mt-2">
-              <div className="flex justify-between items-center font-bold">
-                <span className="text-green-800">Total:</span>
-                <span className="text-green-800">₹{myWinnings.reduce((sum, w) => sum + w.amount, 0)}</span>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-green-700">Tickets Cost ({tickets.length} × ₹{pricePerTicket}):</span>
+                <span className="font-bold text-red-600">-₹{tickets.length * pricePerTicket}</span>
               </div>
+            </div>
+            
+            {/* Net profit/loss */}
+            <div className="border-t-2 border-green-400 pt-2 mt-2">
+              {(() => {
+                const totalWinnings = myWinnings.reduce((sum, w) => sum + w.amount, 0);
+                const totalCost = tickets.length * pricePerTicket;
+                const netAmount = totalWinnings - totalCost;
+                const isProfit = netAmount > 0;
+                const isBreakeven = netAmount === 0;
+                
+                return (
+                  <div className="flex justify-between items-center font-bold">
+                    <span className="text-green-800">Net Result:</span>
+                    <span className={`font-bold ${isBreakeven ? 'text-gray-600' : isProfit ? 'text-green-600' : 'text-red-600'}`}>
+                      {isBreakeven ? '₹0 (Break Even)' : `${isProfit ? '+' : ''}₹${netAmount}`}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
