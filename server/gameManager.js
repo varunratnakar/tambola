@@ -204,6 +204,12 @@ class GameManager {
     const game = this.games.get(gameId?.toUpperCase?.() || gameId);
     if (!game) return;
     
+    // Clear any pending grace timer so it doesn't fire again
+    if (game.lastNumberGraceTimer) {
+      clearTimeout(game.lastNumberGraceTimer);
+      game.lastNumberGraceTimer = null;
+    }
+
     // Notify all players that the game has ended
     this.io.to(gameId).emit('game_completed', { 
       reason,
@@ -400,10 +406,26 @@ class GameManager {
 
     // Check 2: No more numbers left to draw
     if (game.remainingNumbers.length === 0) {
-      console.log(`Game ${gameId} ending: All numbers drawn (${game.drawnNumbers.length}/90)`);
+      // All numbers have been drawn, but give players some time to make their final claims
+      const gracePeriodMs = (game.options?.postLastNumberGraceSeconds || 10) * 1000; // default 10 s
+
+      // Stop auto-draw so the timer isn't needlessly firing
       this.stopAutoDraw(gameId);
-      this.endGame(gameId, 'Game completed - all numbers have been drawn!');
-      return true;
+
+      // If a grace timer is not already running, start one
+      if (!game.lastNumberGraceTimer) {
+        console.log(`Game ${gameId}: all numbers drawn. Starting ${gracePeriodMs / 1000}s grace period before ending.`);
+        game.lastNumberGraceTimer = setTimeout(() => {
+          // End the game if it hasn't ended for some other reason
+          if (this.games.has(gameId)) {
+            console.log(`Game ${gameId}: grace period elapsed – ending game.`);
+            this.endGame(gameId, 'Game completed – all numbers were drawn and grace period elapsed');
+          }
+        }, gracePeriodMs);
+      }
+
+      // Don't end the game immediately – allow claims during grace period
+      return false;
     }
 
     // Check 3: All prizes are claimed

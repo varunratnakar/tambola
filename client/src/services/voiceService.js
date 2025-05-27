@@ -8,6 +8,19 @@ class VoiceService {
     this.pitch = 1.0;
     this.volume = 0.8;
     
+    // Mode: 'ai' (ElevenLabs) by default; fallback option 'browser'
+    this.mode = 'ai';
+    // Cache for AI audio blobs (text -> blobURL)
+    this.cache = new Map();
+    
+    // Determine API base (dev vs prod)
+    const { protocol, hostname, port } = window.location;
+    if (hostname === 'localhost' && port === '3000') {
+      this.apiBase = `${protocol}//${hostname}:4000`;
+    } else {
+      this.apiBase = '';
+    }
+    
     // console.log('VoiceService: Initializing...', {
     //   speechSynthesis: !!window.speechSynthesis,
     //   voicesLength: this.synth?.getVoices()?.length || 0
@@ -183,10 +196,20 @@ class VoiceService {
     //   voiceName: this.voice?.name
     // });
     
-    if (!this.isEnabled || !this.synth) {
+    if (!this.isEnabled) {
       // console.log('VoiceService: Announcement skipped - service disabled or no synth');
       return;
     }
+    
+    // AI mode
+    if (this.mode === 'ai') {
+      const text = this.getNumberCall(number);
+      this.speakAI(text);
+      return;
+    }
+    
+    // Browser speech mode requires synth support
+    if (!this.synth) return;
     
     // Cancel any ongoing speech
     this.synth.cancel();
@@ -323,20 +346,27 @@ class VoiceService {
 
   // Announce game events
   announceEvent(message) {
-    if (!this.isEnabled || !this.synth) return;
-    
+    if (!this.isEnabled) return;
+
+    if (this.mode === 'ai') {
+      this.speakAI(message);
+      return;
+    }
+
+    if (!this.synth) return;
+
     this.synth.cancel();
-    
+
     const utterance = new SpeechSynthesisUtterance(message);
-    
+
     if (this.voice) {
       utterance.voice = this.voice;
     }
-    
+
     utterance.rate = this.rate;
     utterance.pitch = this.pitch;
     utterance.volume = this.volume;
-    
+
     this.synth.speak(utterance);
   }
 
@@ -368,6 +398,7 @@ class VoiceService {
 
   // Check if speech synthesis is supported
   isSupported() {
+    if (this.mode === 'ai') return true;
     return 'speechSynthesis' in window;
   }
 
@@ -423,6 +454,7 @@ class VoiceService {
       currentVoiceLang: this.voice?.lang || 'Unknown',
       rate: this.rate,
       volume: this.volume,
+      mode: this.mode,
       availableVoices: this.getAvailableVoices()
     };
   }
@@ -462,6 +494,40 @@ class VoiceService {
       console.error('VoiceService: Test failed with exception', error);
       return false;
     }
+  }
+
+  /* ------------------------------ AI MODE HELPERS ----------------------------- */
+  async speakAI(text) {
+    try {
+      // Return early if already playing same text quickly? not needed now.
+      if (this.cache.has(text)) {
+        const url = this.cache.get(text);
+        new Audio(url).play();
+        return;
+      }
+
+      const res = await fetch(`${this.apiBase}/api/tts/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!res.ok) {
+        console.error('VoiceService: AI TTS fetch failed', res.status);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      this.cache.set(text, url);
+      new Audio(url).play();
+    } catch (err) {
+      console.error('VoiceService: AI speak error', err);
+    }
+  }
+
+  setMode(mode) {
+    this.mode = mode === 'ai' ? 'ai' : 'browser';
   }
 }
 

@@ -21,21 +21,41 @@ function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
 }
 
 
-function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange }) {
   if (!tickets || tickets.length === 0) return null;
 
   const isDisabled = connectionStatus !== 'connected';
 
   return (
-      <div className={`player-game-container ${theme === 'fancy' ? 'theme-fancy' : theme === 'kids' ? 'theme-kids' : theme === 'professional' ? 'theme-professional' : 'theme-simple'}`}>
+      <div className={`player-game-container ${
+        theme === 'harrypotter' ? 'theme-harrypotter' :
+        theme === 'fun' ? 'theme-fun' :
+        theme === 'kids' ? 'theme-kids' :
+        theme === 'professional' ? 'theme-professional' : 'theme-simple'
+      }`}>
         {/* Host Indicator - Removed for more screen space */}
 
       {/* Tickets Grid */}
       <div className="tickets-section">
-        <div className={`tickets-container-new ${theme === 'fancy' ? 'tickets-fancy' : theme === 'kids' ? 'tickets-kids' : theme === 'professional' ? 'tickets-professional' : ''}`}>
+        <div className={`tickets-container-new ${
+          theme === 'harrypotter' ? 'tickets-harrypotter' :
+          theme === 'fun' ? 'tickets-fun' :
+          theme === 'kids' ? 'tickets-kids' :
+          theme === 'professional' ? 'tickets-professional' : ''
+        }`}>
                       {tickets.map((ticket, index) => (
-              <div key={index} className={`ticket-wrapper ${theme === 'fancy' ? 'ticket-fancy' : theme === 'kids' ? 'ticket-kids' : theme === 'professional' ? 'ticket-professional' : ''}`}>
-                <div className={`ticket-header ${theme === 'fancy' ? 'header-fancy' : theme === 'kids' ? 'header-kids' : theme === 'professional' ? 'header-professional' : ''}`}>
+              <div key={index} className={`ticket-wrapper ${
+                theme === 'harrypotter' ? 'ticket-harrypotter' :
+                theme === 'fun' ? 'ticket-fun' :
+                theme === 'kids' ? 'ticket-kids' :
+                theme === 'professional' ? 'ticket-professional' : ''
+              }`}>
+                <div className={`ticket-header ${
+                  theme === 'harrypotter' ? 'header-harrypotter' :
+                  theme === 'fun' ? 'header-fun' :
+                  theme === 'kids' ? 'header-kids' :
+                  theme === 'professional' ? 'header-professional' : ''
+                }`}>
                 <span className="ticket-number">Ticket {index + 1}</span>
         {latestNumber && (
                   <span 
@@ -53,7 +73,12 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
                   )}
                 </div>
           </div>
-                              <div className={`ticket-grid-new ${theme === 'fancy' ? 'grid-fancy' : theme === 'kids' ? 'grid-kids' : theme === 'professional' ? 'grid-professional' : ''}`}>
+                              <div className={`ticket-grid-new ${
+                                theme === 'harrypotter' ? 'grid-harrypotter' :
+                                theme === 'fun' ? 'grid-fun' :
+                                theme === 'kids' ? 'grid-kids' :
+                                theme === 'professional' ? 'grid-professional' : ''
+                              }`}>
           {ticket.map((row, rowIdx) => (
                   <div key={rowIdx} className="ticket-row">
               {row.map((num, colIdx) => (
@@ -74,7 +99,12 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
       </div>
 
       {/* Prize Claim Buttons */}
-      <div className={`prize-section ${theme === 'fancy' ? 'prize-fancy' : theme === 'kids' ? 'prize-kids' : theme === 'professional' ? 'prize-professional' : ''}`}>
+      <div className={`prize-section ${
+        theme === 'harrypotter' ? 'prize-harrypotter' :
+        theme === 'fun' ? 'prize-fun' :
+        theme === 'kids' ? 'prize-kids' :
+        theme === 'professional' ? 'prize-professional' : ''
+      }`}>
         <div className="prize-buttons-grid">
           <button 
             className={`prize-btn line-btn ${winners.topLine ? 'claimed' : ''} ${isDisabled ? 'disabled' : ''}`}
@@ -170,12 +200,23 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
               className="py-1 px-2 rounded-lg text-sm font-bold border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <option value="simple">🎨 Simple</option>
-              <option value="fancy">✨ Fancy</option>
+              <option value="harrypotter">🧙‍♂️ Harry Potter</option>
+              <option value="fun">🎉 Fun</option>
               <option value="kids">🎈 Kids</option>
               <option value="professional">💼 Professional</option>
             </select>
             
-            {/* Voice Control */}
+            {/* Voice Mode Selector */}
+            <select
+              value={voiceStatus.mode}
+              onChange={(e) => onVoiceModeChange(e.target.value)}
+              className="py-1 px-2 rounded-lg text-sm font-bold border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <option value="browser">🗣️ Browser</option>
+              <option value="ai">🤖 AI</option>
+            </select>
+
+            {/* Voice Enable/Disable */}
             {voiceService.isSupported() && (
               <button 
                 className={`py-2 px-3 rounded-lg font-bold text-sm transition-colors ${
@@ -527,8 +568,11 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               {gameEndInfo.winners.corners && (
                 <p>🔸 Corners: <span className="font-bold">{gameEndInfo.winners.corners}</span></p>
               )}
-              {gameEndInfo.winners.house && (
-                <p>🎉 Full House: <span className="font-bold">{gameEndInfo.winners.house}</span></p>
+              {/* Full House (can be multiple winners) */}
+              {Array.isArray(gameEndInfo.winners.house) && gameEndInfo.winners.house.length > 0 && (
+                gameEndInfo.winners.house.map((w, idx) => (
+                  <p key={idx}>🎉 Full House #{w.position}: <span className="font-bold">{w.playerName}</span> <span className="text-green-700 font-semibold">₹{w.prizeAmount}</span></p>
+                ))
               )}
               {!Object.values(gameEndInfo.winners).some(winner => winner) && (
                 <p className="text-gray-600 italic">No prizes were claimed</p>
@@ -632,6 +676,11 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               onVoiceToggle={() => {
                 const newState = voiceService.toggle();
                 setVoiceEnabled(newState);
+                setVoiceStatus(voiceService.getStatus());
+              }}
+              voiceStatus={voiceStatus}
+              onVoiceModeChange={(mode) => {
+                voiceService.setMode(mode);
                 setVoiceStatus(voiceService.getStatus());
               }}
               connectionStatus={connectionStatus}

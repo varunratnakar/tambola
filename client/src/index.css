@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Comic+Neue:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Comic+Neue:wght@400;700&family=IM+Fell+English+SC&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -1174,15 +1174,6 @@
      box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
    }
 
-   .theme-kids .prize-btn.claimed::after {
-     content: '✅';
-     position: absolute;
-     top: 5px;
-     right: 5px;
-     font-size: 1.2rem;
-     animation: kidsCheckmark 1s ease-out;
-   }
-
    .theme-kids .ticket-latest-number {
      background: linear-gradient(135deg, #ff9800, #f57c00);
      border: 4px solid white;
@@ -1562,6 +1553,364 @@
     max-width: none !important;
   }
 }
+
+@keyframes bounceIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes latestNumberFade {
+  0% { 
+    opacity: 1; 
+  }
+  70% { 
+    opacity: 1; 
+  }
+  100% { 
+    opacity: 0; 
+  }
+}
+
+@keyframes latestNumberPulse {
+  0% { 
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+  }
+  50% { 
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+  }
+  100% { 
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+  }
+}
+
+@keyframes latestNumberEnter {
+  0% { 
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+  }
+  50% { 
+    transform: scale(1.3) rotate(-90deg);
+    opacity: 1;
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+  }
+  100% { 
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+  }
+}
+
+@keyframes slideDownToast {
+  0% { transform: translateY(-10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-down {
+  animation: slideDownToast 0.3s ease-out;
+}
+
+/* Harry Potter Theme Styles */
+.theme-harrypotter {
+  background: linear-gradient(135deg, #4a3b31 0%, #2c1e18 100%); /* Darker, richer wood/parchment */
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 8px 32px rgba(44, 30, 24, 0.6);
+  position: relative;
+  overflow: hidden;
+  font-family: 'IM Fell English SC', serif;
+  color: #f0e6d2; /* Creamy text for dark background */
+}
+
+.tickets-harrypotter {
+  gap: 1rem !important;
+}
+
+.ticket-harrypotter {
+  background: #f0e6d2; /* Aged parchment */
+  border: 4px double #603813; /* Dark brown double border */
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 20px rgba(96, 56, 19, 0.35);
+  font-family: 'IM Fell English SC', serif;
+}
+
+.header-harrypotter {
+  background: linear-gradient(135deg, #783314, #50220c); /* Rich mahogany/house colors */
+  color: #ffd700; /* Metallic gold */
+  border-radius: 0.75rem 0.75rem 0 0;
+  margin: -0.5rem -0.5rem 0.5rem -0.5rem;
+  padding: 0.75rem 0.5rem;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+  border-bottom: 2px solid #b8860b; /* Darker gold border */
+  font-family: 'IM Fell English SC', serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.header-harrypotter .ticket-recent-numbers {
+  color: #e6bf80; /* Lighter gold/parchment for recent numbers */
+}
+
+.grid-harrypotter {
+  border: 3px solid #50220c; /* Dark wood border */
+  border-radius: 0.75rem;
+  background: rgba(240, 230, 210, 0.1); /* Faint parchment overlay on grid */
+  box-shadow: inset 0 3px 6px rgba(0,0,0,0.3);
+}
+
+.theme-harrypotter .number-cell {
+  background: #fdf6e3; /* Lighter parchment for cells */
+  color: #4a2c1a; /* Dark brown text */
+  border: 1px solid #c8bca8; /* Subtle parchment border */
+  font-family: 'IM Fell English SC', serif;
+  font-size: clamp(1.1rem, 3.8vw, 1.6rem); /* Slightly larger */
+}
+
+.theme-harrypotter .number-cell:hover {
+  background: #fff0c8;
+  transform: translateY(-2px);
+  border-color: #b8860b;
+  box-shadow: 0 2px 5px rgba(184, 134, 11, 0.3);
+}
+
+.theme-harrypotter .marked-cell {
+  background: #ffd700; /* Gold for marked */
+  color: #50220c; /* Dark brown text on gold */
+  border: 1px solid #b8860b;
+  font-family: 'IM Fell English SC', serif;
+  font-size: clamp(1.1rem, 3.8vw, 1.6rem);
+}
+
+.theme-harrypotter .marked-cell::before {
+  background: linear-gradient(
+    -45deg,
+    transparent 48%,
+    #603813 48%, /* Dark brown cross-out */
+    #603813 52%,
+    transparent 52%
+  );
+  opacity: 0.7;
+}
+
+.theme-harrypotter .empty-cell {
+  background: rgba(240, 230, 210, 0.7); /* Semi-transparent parchment for empty */
+  border: 1px solid #d8ccba;
+}
+
+.prize-harrypotter {
+  background: #f0e6d2; /* Parchment background for prizes */
+  border: 3px solid #783314; /* Mahogany border */
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(72, 40, 20, 0.4);
+}
+
+.theme-harrypotter .prize-btn {
+  background: #e6bf80; /* Aged gold/bronze */
+  border: 2px solid #603813; /* Dark brown border */
+  color: #4a2c1a; /* Dark brown text */
+  font-family: 'IM Fell English SC', serif;
+  border-radius: 0.5rem;
+  text-transform: uppercase;
+}
+
+.theme-harrypotter .prize-btn:hover:not(:disabled) {
+  background: #ffd700; /* Brighter gold on hover */
+  border-color: #50220c;
+  color: #50220c;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.theme-harrypotter .prize-btn.claimed {
+  background: #a89878; /* Muted, claimed look */
+  color: #544838;
+  border-color: #786850;
+}
+
+.theme-harrypotter .ticket-latest-number {
+  background: radial-gradient(circle, #fffacd 20%, #ffd700 80%); /* Snitch-like gold */
+  color: #603813; /* Dark brown number */
+  border: 3px solid #b8860b; /* Dark gold border */
+  box-shadow: 0 0 15px 5px rgba(255, 215, 0, 0.7); /* Golden glow */
+  font-family: 'IM Fell English SC', serif;
+  font-size: 1.25rem;
+}
+
+/* Fun Theme Styles */
+.theme-fun {
+  background: linear-gradient(45deg, #ff9a9e 0%, #fecfef 25%, #ffecb3 50%, #a9def9 75%, #ccfbf1 100%); /* Rainbow sherbet! */
+  border-radius: 1.5rem; /* More rounded */
+  padding: 1rem;
+  box-shadow: 0 10px 35px rgba(255, 107, 107, 0.5);
+  position: relative;
+  overflow: hidden;
+  font-family: 'Comic Neue', cursive;
+  color: #5733a3; /* Deep vibrant purple */
+}
+
+.theme-fun::before { /* Subtle animated pattern */
+  content: '🎉🥳🎈🎊';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  font-size: 3rem;
+  opacity: 0.08;
+  animation: funParty 30s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tickets-fun {
+  gap: 1rem !important;
+}
+
+.ticket-fun {
+  background: #fff9de; /* Creamy yellow base */
+  border: 4px dashed #ff6b6b; /* Thicker, dashed fun border */
+  border-radius: 1rem;
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.25);
+  transform: rotate(-2deg); /* A bit more tilt */
+  transition: transform 0.3s ease;
+}
+
+.ticket-fun:hover {
+  transform: rotate(2deg) scale(1.03) translateY(-3px); /* More playful hover */
+}
+
+.header-fun {
+  background: linear-gradient(135deg, #f7797d, #FBD786, #C6FFDD); /* Tri-color fun gradient */
+  color: #ffffff;
+  border-radius: 0.75rem 0.75rem 0 0;
+  margin: -0.5rem -0.5rem 0.5rem -0.5rem;
+  padding: 0.75rem 0.5rem;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.4);
+  font-family: 'Comic Neue', cursive; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: funWiggle 0.5s ease-in-out infinite alternate;
+}
+
+.grid-fun {
+  border: 5px dotted #fd79a8; /* Playful pink dotted border */
+  border-radius: 0.75rem;
+  background: #e0fffb; /* Light cyan background */
+  box-shadow: inset 0 3px 6px rgba(0,0,0,0.1);
+}
+
+.theme-fun .number-cell {
+  background: #ffffff;    
+  color: #e84393; /* Bright pink */
+  border: 2px dashed #fab1a0; /* Peachy dashed border */
+  font-family: 'Comic Neue', cursive; font-weight: 700;
+  font-size: clamp(1.0rem, 3.6vw, 1.5rem);
+  border-radius: 50%; /* Make them circles! */
+  transition: all 0.2s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+}
+
+.theme-fun .number-cell:hover {
+  background: #ffeaa7; /* Sunny yellow */
+  transform: translateY(-3px) scale(1.1) rotate(5deg);
+  border-color: #ff7675;
+}
+
+.theme-fun .marked-cell {
+  background: #55efc4; /* Bright mint */
+  color: #ffffff;
+  border: 2px solid #00b894; /* Darker mint solid border */
+  transform: rotate(-5deg) scale(1.1); /* More tilt and pop */
+  font-family: 'Comic Neue', cursive; font-weight: 700;
+  border-radius: 50%;
+  position: relative;
+}
+
+.theme-fun .marked-cell::before { /* Star instead of cross-out */
+  content: '🌟';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  font-size: 1.5em;
+  color: #ffda77;
+  text-shadow: 0 0 5px #feca57;
+  animation: funStarSpin 2s linear infinite;
+}
+
+.theme-fun .empty-cell {
+  background: rgba(224, 255, 251, 0.7); /* Lighter cyan for empty */
+  border: 2px dashed #dfe6e9;
+  border-radius: 50%;
+}
+
+.prize-fun {
+  background: #fff0f5; /* Light pinkish */
+  border: 5px wavy #ff7675; /* Wavy border needs a trick or SVG, simulate with thick dotted */
+  border-style: dotted; /* Changed to dotted as wavy is not standard */
+  border-radius: 1.5rem;
+  box-shadow: 0 8px 32px rgba(255, 107, 107, 0.4);
+}
+
+.theme-fun .prize-btn {
+  background: linear-gradient(45deg, #fd79a8, #ff7675); /* Pink/Red gradient */
+  border: 3px solid #ffffff;
+  color: #ffffff;
+  font-family: 'Comic Neue', cursive; font-weight: 700;
+  border-radius: 25px; /* Pill-shaped */
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  transition: all 0.2s ease-out;
+}
+
+.theme-fun .prize-btn:hover:not(:disabled) {
+  background: linear-gradient(45deg, #ff7675, #fd79a8);
+  transform: scale(1.08) rotate(3deg);
+  box-shadow: 0 5px 15px rgba(253, 121, 168, 0.5);
+}
+
+.theme-fun .prize-btn.claimed {
+  background: #b2bec3;
+  border-color: #dfe6e9;
+  color: #636e72;
+  transform: scale(0.95);
+}
+
+.theme-fun .ticket-latest-number {
+  background: #54a0ff; /* Bright blue */
+  color: #ffffff;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 15px 5px rgba(84, 160, 255, 0.6);
+  animation: funLatestBounce 1s ease-in-out infinite;
+  font-family: 'Comic Neue', cursive; font-weight: 700;
+  font-size: 1.3rem;
+}
+
+/* Fun Theme Animations */
+@keyframes funParty {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(10px, -10px) rotate(5deg); }
+  50% { transform: translate(0, 20px) rotate(-5deg); }
+  75% { transform: translate(-10px, -10px) rotate(10deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes funWiggle {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+}
+
+@keyframes funStarSpin {
+  from { transform: translate(-50%, -50%) scale(0.8) rotate(0deg); }
+  to { transform: translate(-50%, -50%) scale(0.8) rotate(360deg); }
+}
+
+@keyframes funLatestBounce {
+  0%, 100% { transform: translateY(0) rotate(5deg) scale(1); }
+  50% { transform: translateY(-8px) rotate(-5deg) scale(1.1); }
+}
+
+/* END Custom Themes */
 
 @keyframes bounceIn {
   0% { transform: scale(0.3); opacity: 0; }
