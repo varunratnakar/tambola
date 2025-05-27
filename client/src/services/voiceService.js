@@ -19,7 +19,7 @@ class VoiceService {
     this.cache = new Map();
     
     // Determine API base (dev vs prod)
-    const envBase = import.meta.env.VITE_API_BASE || process.env.REACT_APP_API_BASE;
+    const envBase = import.meta.env.VITE_SERVER_URL || process.env.REACT_APP_API_BASE;
     this.apiBase = envBase ? envBase.replace(/\/$/, '') : this.deriveLocalBase();      
     
     // console.log('VoiceService: Initializing...', {
