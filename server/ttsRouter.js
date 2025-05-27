@@ -31,7 +31,11 @@ router.post('/speech', async (req, res) => {
       },
       data: {
         model_id: 'eleven_flash_v2_5',
-        text
+        text,
+        voice_settings: {
+          stability: 0.35,
+          similarity_boost: 0.85
+        }
       },
       responseType: 'arraybuffer',
       timeout: 15000

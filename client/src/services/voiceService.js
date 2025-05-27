@@ -14,12 +14,8 @@ class VoiceService {
     this.cache = new Map();
     
     // Determine API base (dev vs prod)
-    const { protocol, hostname, port } = window.location;
-    if (hostname === 'localhost' && port === '3000') {
-      this.apiBase = `${protocol}//${hostname}:4000`;
-    } else {
-      this.apiBase = '';
-    }
+    const envBase = import.meta.env.VITE_API_BASE || process.env.REACT_APP_API_BASE;
+    this.apiBase = envBase ? envBase.replace(/\/$/, '') : this.deriveLocalBase();
     
     // console.log('VoiceService: Initializing...', {
     //   speechSynthesis: !!window.speechSynthesis,
