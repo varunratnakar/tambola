@@ -21,7 +21,7 @@ function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
 }
 
 
-function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange, gameStarted }) {
   if (!tickets || tickets.length === 0) return null;
 
   const isDisabled = connectionStatus !== 'connected';
@@ -34,6 +34,13 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
         theme === 'professional' ? 'theme-professional' : 'theme-simple'
       }`}>
         {/* Host Indicator - Removed for more screen space */}
+
+      {/* Waiting Banner */}
+      {!gameStarted && (
+        <div className="waiting-message text-center mb-2">
+          ⏳ Waiting for the game to start...
+        </div>
+      )}
 
       {/* Tickets Grid */}
       <div className="tickets-section">
@@ -688,6 +695,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               remainingNumbers={remainingNumbers}
               theme={theme}
               onThemeChange={setTheme}
+              gameStarted={gameStarted}
             />
           )}
         </div>
