@@ -18,6 +18,21 @@ class VoiceService {
     // Cache for AI audio blobs (text -> blobURL)
     this.cache = new Map();
     
+    // Load persisted cache from localStorage (if any)
+    try {
+      const persisted = localStorage.getItem('ttsCache');
+      if (persisted) {
+        const obj = JSON.parse(persisted);
+        Object.entries(obj).forEach(([text, b64]) => {
+          const blob = this.base64ToBlob(b64, 'audio/mpeg');
+          const url = URL.createObjectURL(blob);
+          this.cache.set(text, url);
+        });
+      }
+    } catch (e) {
+      console.warn('VoiceService: failed to load persisted TTS cache', e);
+    }
+    
     // Determine API base (dev vs prod)
     const envBase = import.meta.env.VITE_SERVER_URL || process.env.REACT_APP_API_BASE;
     this.apiBase = envBase ? envBase.replace(/\/$/, '') : this.deriveLocalBase();      
@@ -521,6 +536,7 @@ class VoiceService {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       this.cache.set(text, url);
+      this.persistCacheEntry(text, blob);
       new Audio(url).play();
     } catch (err) {
       console.error('VoiceService: AI speak error', err);
@@ -529,6 +545,71 @@ class VoiceService {
 
   setMode(mode) {
     this.mode = mode === 'ai' ? 'ai' : 'browser';
+    if (this.mode === 'ai') {
+      this.prefetchNumberCalls();
+    }
+  }
+
+  base64ToBlob(b64, mime) {
+    const byteChars = atob(b64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+      byteNumbers[i] = byteChars.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mime });
+  }
+
+  blobToBase64(blob) {
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result; // data:audio/mpeg;base64,...
+        const base64 = dataUrl.split(',')[1];
+        res(base64);
+      };
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async persistCacheEntry(text, blob) {
+    try {
+      const base64 = await this.blobToBase64(blob);
+      const existing = JSON.parse(localStorage.getItem('ttsCache') || '{}');
+      existing[text] = base64;
+      localStorage.setItem('ttsCache', JSON.stringify(existing));
+    } catch (e) {
+      // Storage quota exceeded or other error – ignore
+      console.warn('VoiceService: could not persist TTS cache', e);
+    }
+  }
+
+  // Prefetch Tambola number calls (1-90)
+  async prefetchNumberCalls() {
+    const numbers = Array.from({ length: 90 }, (_, i) => i + 1);
+    // Simple sequential fetch with 1-2 s gap to avoid hammering API
+    for (const n of numbers) {
+      const text = this.getNumberCall(n);
+      if (this.cache.has(text)) continue;
+      try {
+        await this.speakAIPrefetch(text);
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 800)); // 0.8 s between calls
+    }
+  }
+
+  async speakAIPrefetch(text) {
+    const res = await fetch(`${this.apiBase}/api/tts/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    this.cache.set(text, url);
+    this.persistCacheEntry(text, blob);
   }
 }
 
