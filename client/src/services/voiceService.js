@@ -1,5 +1,10 @@
 // Voice service for Tambola number announcements
 class VoiceService {
+  deriveLocalBase() {
+    const { protocol, hostname, port } = window.location;
+    return `${protocol}//${hostname}:4000`;
+  }
+  
   constructor() {
     this.synth = window.speechSynthesis;
     this.isEnabled = true;
@@ -15,7 +20,7 @@ class VoiceService {
     
     // Determine API base (dev vs prod)
     const envBase = import.meta.env.VITE_API_BASE || process.env.REACT_APP_API_BASE;
-    this.apiBase = envBase ? envBase.replace(/\/$/, '') : this.deriveLocalBase();
+    this.apiBase = envBase ? envBase.replace(/\/$/, '') : this.deriveLocalBase();      
     
     // console.log('VoiceService: Initializing...', {
     //   speechSynthesis: !!window.speechSynthesis,
