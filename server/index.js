@@ -193,8 +193,21 @@ io.on('connection', (socket) => {
   socket.on('claim', ({ gameId, claimType, lines, markedNumbers }, cb) => {
     // claimType: 'line', 'corners', 'early5', or 'house'
     try {
+      const penaltySeconds = 20; // cooldown duration
       const result = gameManager.validateClaim(gameId, socket.id, claimType, lines, markedNumbers);
       const game = gameManager.getGame(gameId);
+
+      // If Bogey enabled, check penalty before anything else
+      if (game && game.options.enableBogey) {
+        const player = game.players[socket.id];
+        if (player?.penaltyUntil && Date.now() < player.penaltyUntil) {
+          const remaining = Math.ceil((player.penaltyUntil - Date.now())/1000);
+          socket.emit('claim_failed', { reason: `Penalty active (${remaining}s)` });
+          cb && cb({ valid: false, reason: 'Penalty active' });
+          return;
+        }
+      }
+
       if (result.valid) {
         let prizeMessage = '';
         let prizeAmount = 0;
@@ -243,6 +256,10 @@ io.on('connection', (socket) => {
         // Bogey feature
         try {
           if (game && game.options.enableBogey) {
+            // set penalty timestamp
+            if (!game.players[socket.id]) game.players[socket.id]={};
+            game.players[socket.id].penaltyUntil = Date.now() + penaltySeconds*1000;
+            io.to(socket.id).emit('penalty_started', { seconds: penaltySeconds });
             io.to(gameId).emit('bogey_called', { playerName: game.players[socket.id]?.name || 'Unknown', reason: result.reason });
           }
         } catch (_) {}
@@ -271,6 +288,7 @@ io.on('connection', (socket) => {
   socket.on('pause_game', ({ gameId, seconds = 30 }, cb) => {
     try {
       gameManager.pauseAutoDraw(gameId, seconds);
+      io.to(gameId).emit('game_paused');
       cb && cb({ status: 'ok' });
     } catch(err) {
       cb && cb({ status: 'error', message: err.message });

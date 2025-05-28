@@ -21,10 +21,10 @@ function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
 }
 
 
-function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange, gameStarted, isHost, socket, gameId, autoDrawEnabled, addNotification, onExit }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange, gameStarted, isHost, socket, gameId, autoDrawEnabled, addNotification, penaltyRemaining, onExit }) {
   if (!tickets || tickets.length === 0) return null;
 
-  const isDisabled = connectionStatus !== 'connected';
+  const isDisabled = connectionStatus !== 'connected' || penaltyRemaining > 0;
 
   return (
       <div className={`player-game-container ${
@@ -191,7 +191,12 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
       <div className="bg-white rounded-lg p-2 mt-2 border border-gray-300">
         <div className="flex items-center justify-between gap-2">
           {/* Remaining Numbers Info */}
-          {remainingNumbers !== undefined && (
+          {penaltyRemaining > 0 && (
+            <div className="flex items-center gap-2 text-sm font-bold text-red-700">
+              ⏳ Penalty: {penaltyRemaining}s
+            </div>
+          )}
+          {penaltyRemaining === 0 && remainingNumbers !== undefined && (
             <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
               <span className="text-red-600">📊</span>
               <span>{remainingNumbers} numbers left</span>
@@ -315,6 +320,9 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
 
   // Non-blocking toast notifications
   const [notifications, setNotifications] = useState([]);
+
+  // Penalty / cooldown
+  const [penaltyRemaining, setPenaltyRemaining] = useState(0);
 
   const [gamePaused, setGamePaused] = useState(false);
 
@@ -474,6 +482,10 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       }
     };
 
+    const onPenaltyStarted = ({ seconds }) => {
+      setPenaltyRemaining(seconds);
+    };
+
     socket.on('number_drawn', onNumber);
     socket.on('claim_success', onClaimSuccess);
     socket.on('claim_failed', onClaimFailed);
@@ -483,10 +495,23 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     socket.on('prizes_updated', onPrizesUpdated);
     socket.on('bogey_called', onBogeyCalled);
     socket.on('player_left', onPlayerLeft);
+    socket.on('penalty_started', onPenaltyStarted);
     
     // Keep reference to avoid duplicate listeners
-    const onGamePaused = () => setGamePaused(true);
-    const onGameResumed = () => setGamePaused(false);
+    const onGamePaused = () => {
+      setGamePaused(true);
+      addNotification('⏸️ Game Paused', 'info');
+      if (voiceEnabled && voiceService.isSupported()) {
+        voiceService.announceEvent('The game is paused.');
+      }
+    };
+    const onGameResumed = () => {
+      setGamePaused(false);
+      addNotification('▶️ Game Resumed', 'success');
+      if (voiceEnabled && voiceService.isSupported()) {
+        voiceService.announceEvent('The game has resumed.');
+      }
+    };
     const onPauseRequested = ({ playerName }) => {
       if (isHost) {
         addNotification(`⏸️ ${playerName} requested a pause`, 'info');
@@ -519,6 +544,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('game_paused', onGamePaused);
       socket.off('game_resumed', onGameResumed);
       socket.off('pause_requested', onPauseRequested);
+      socket.off('penalty_started', onPenaltyStarted);
     };
   }, [socket, isHost, voiceEnabled]);
 
@@ -612,24 +638,6 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     };
   }, [socket]);
 
-  // Announce pause/resume and show notifications when auto draw status changes
-  useEffect(() => {
-    if (!gameStarted) return; // Don't announce before the game starts
-    if (autoDrawEnabled) {
-      // Game resumed
-      addNotification('▶️ Game Resumed', 'success');
-      if (voiceEnabled && voiceService.isSupported()) {
-        voiceService.announceEvent('The game has resumed.');
-      }
-    } else {
-      // Game paused
-      addNotification('⏸️ Game Paused', 'info');
-      if (voiceEnabled && voiceService.isSupported()) {
-        voiceService.announceEvent('The game is paused.');
-      }
-    }
-  }, [autoDrawEnabled, voiceEnabled]);
-
   // Force default voice mode to AI on initial mount
   useEffect(() => {
     if (voiceService.getStatus().mode !== 'ai') {
@@ -637,6 +645,21 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       setVoiceStatus(voiceService.getStatus());
     }
   }, []);
+
+  // Countdown for penalty
+  useEffect(() => {
+    if (penaltyRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setPenaltyRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [penaltyRemaining]);
 
   return (
     <div className="flex flex-col h-full">
@@ -820,6 +843,7 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               gameId={gameId}
               autoDrawEnabled={autoDrawEnabled}
               addNotification={addNotification}
+              penaltyRemaining={penaltyRemaining}
               onExit={exitGame}
             />
           )}
