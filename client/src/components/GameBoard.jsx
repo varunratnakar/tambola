@@ -21,7 +21,7 @@ function NumberGrid({ drawnNumbers, onClick, isClickable = true }) {
 }
 
 
-function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange, gameStarted }) {
+function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey, drawn, gamePrizes, winners, handleClaim, voiceEnabled, onVoiceToggle, voiceStatus, onVoiceModeChange, connectionStatus, gameOptions, remainingNumbers, theme, onThemeChange, gameStarted, isHost, socket, gameId, autoDrawEnabled, addNotification, onExit }) {
   if (!tickets || tickets.length === 0) return null;
 
   const isDisabled = connectionStatus !== 'connected';
@@ -213,28 +213,43 @@ function PlayerGameView({ tickets, marked, onCell, latestNumber, latestNumberKey
               <option value="professional">💼 Professional</option>
             </select>
             
-            {/* Voice Mode Selector */}
-            <select
-              value={voiceStatus.mode}
-              onChange={(e) => onVoiceModeChange(e.target.value)}
-              className="py-1 px-2 rounded-lg text-sm font-bold border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <option value="browser">🗣️ Browser</option>
-              <option value="ai">🤖 AI</option>
-            </select>
-
             {/* Voice Enable/Disable */}
             {voiceService.isSupported() && (
               <button 
-                className={`py-2 px-3 rounded-lg font-bold text-sm transition-colors ${
+                className={`py-2 px-3 rounded-full text-sm transition-colors ${
                   voiceEnabled 
                     ? 'bg-green-500 text-white hover:bg-green-600' 
                     : 'bg-gray-400 text-gray-700 hover:bg-gray-500'
                 }`}
                 onClick={onVoiceToggle}
               >
-                {voiceEnabled ? '🔊 Voice ON' : '🔇 Voice OFF'}
+                {voiceEnabled ? '🔊' : '🔇'}
               </button>
+            )}
+
+            {/* Exit Game */}
+            <button
+              className="btn-danger text-xs py-1 px-2"
+              onClick={onExit}
+            >🏃 Exit</button>
+
+            {/* Pause or Request Pause */}
+            {isHost ? (
+              <button
+                className={`text-xs py-1 px-2 ${autoDrawEnabled ? 'btn-danger' : 'btn-primary'}`}
+                onClick={() => {
+                  if (autoDrawEnabled) {
+                    socket.emit('pause_game', { gameId, seconds: 60 });
+                  } else {
+                    socket.emit('resume_game', { gameId });
+                  }
+                }}
+              >{autoDrawEnabled ? '⏸️ Pause Game' : '▶️ Resume Game'}</button>
+            ) : (
+              <button
+                className="btn-secondary text-xs py-1 px-2"
+                onClick={() => socket.emit('request_pause', { gameId })}
+              >🙋‍♂️ Request Pause</button>
             )}
           </div>
         </div>
@@ -293,13 +308,29 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   const [voiceStatus, setVoiceStatus] = useState(initialVoiceStatus);
   
   // Theme selection
-  const [theme, setTheme] = useState('simple');
+  const [theme, setTheme] = useState('professional');
   
   // Connection status
   const [connectionStatus, setConnectionStatus] = useState('connected');
 
   // Non-blocking toast notifications
   const [notifications, setNotifications] = useState([]);
+
+  const [gamePaused, setGamePaused] = useState(false);
+
+  // Allow player to exit game and return to lobby
+  const exitGame = () => {
+    // Remove saved session so auto-rejoin does not trigger
+    sessionStorage.removeItem('tambolaSession');
+    try {
+      if (socket && socket.connected) {
+        socket.disconnect();
+      }
+    } catch (_) {}
+    if (onBackToLobby) {
+      onBackToLobby();
+    }
+  };
 
   const addNotification = (message, type = 'info', duration = 5000) => {
     const id = Date.now() + Math.random();
@@ -432,6 +463,17 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       if (prizes) setGamePrizes(prizes);
     };
 
+    const onPlayerLeft = ({ playerName }) => {
+      addNotification(`👋 ${playerName || 'A player'} left the game`, 'info');
+    };
+
+    const onBogeyCalled = ({ playerName, reason }) => {
+      addNotification(`🚫 Bogey! ${playerName || 'Someone'} made a false claim (${reason})`, 'error');
+      if (voiceEnabled && voiceService.isSupported()) {
+        voiceService.announceEvent(`Bogey! ${playerName || 'A player'} made a false claim.`);
+      }
+    };
+
     socket.on('number_drawn', onNumber);
     socket.on('claim_success', onClaimSuccess);
     socket.on('claim_failed', onClaimFailed);
@@ -439,6 +481,25 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
     socket.on('game_cancelled', onGameCancelled);
     socket.on('game_info', onGameInfo);
     socket.on('prizes_updated', onPrizesUpdated);
+    socket.on('bogey_called', onBogeyCalled);
+    socket.on('player_left', onPlayerLeft);
+    
+    // Keep reference to avoid duplicate listeners
+    const onGamePaused = () => setGamePaused(true);
+    const onGameResumed = () => setGamePaused(false);
+    const onPauseRequested = ({ playerName }) => {
+      if (isHost) {
+        addNotification(`⏸️ ${playerName} requested a pause`, 'info');
+        // Voice announce for host
+        if (voiceEnabled && voiceService.isSupported()) {
+          voiceService.announceEvent(`${playerName} has requested a pause.`);
+        }
+      }
+    };
+
+    socket.on('game_paused', onGamePaused);
+    socket.on('game_resumed', onGameResumed);
+    socket.on('pause_requested', onPauseRequested);
     
     return () => {
       socket.off('heartbeat');
@@ -453,8 +514,13 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
       socket.off('game_cancelled', onGameCancelled);
       socket.off('game_info', onGameInfo);
       socket.off('prizes_updated', onPrizesUpdated);
+      socket.off('bogey_called', onBogeyCalled);
+      socket.off('player_left', onPlayerLeft);
+      socket.off('game_paused', onGamePaused);
+      socket.off('game_resumed', onGameResumed);
+      socket.off('pause_requested', onPauseRequested);
     };
-  }, [socket]);
+  }, [socket, isHost, voiceEnabled]);
 
   // Redirect to lobby when game is cancelled
   useEffect(() => {
@@ -518,6 +584,59 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
   };
 
   // Cancel game function removed - no host controls
+
+  // Resume reconnect handler when tab regains focus
+  useEffect(() => {
+    const resume = () => {
+      if (socket.connected) return;
+      const saved = sessionStorage.getItem('tambolaSession');
+      if (!saved) return;
+      const { gameId: savedGameId, playerName: savedName, numTickets: savedTickets } = JSON.parse(saved);
+      if (!savedGameId) return;
+
+      socket.connect();
+      const attemptJoin = () => {
+        socket.emit('join_game', { gameId: savedGameId, playerName: savedName, numTickets: savedTickets||1 }, (res) => {
+          if (res.status !== 'ok' && res.message?.includes('already started')) {
+            setTimeout(attemptJoin, 1000);
+          }
+        });
+      };
+      socket.once('connect', attemptJoin);
+    };
+    window.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', resume);
+    return () => {
+      window.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', resume);
+    };
+  }, [socket]);
+
+  // Announce pause/resume and show notifications when auto draw status changes
+  useEffect(() => {
+    if (!gameStarted) return; // Don't announce before the game starts
+    if (autoDrawEnabled) {
+      // Game resumed
+      addNotification('▶️ Game Resumed', 'success');
+      if (voiceEnabled && voiceService.isSupported()) {
+        voiceService.announceEvent('The game has resumed.');
+      }
+    } else {
+      // Game paused
+      addNotification('⏸️ Game Paused', 'info');
+      if (voiceEnabled && voiceService.isSupported()) {
+        voiceService.announceEvent('The game is paused.');
+      }
+    }
+  }, [autoDrawEnabled, voiceEnabled]);
+
+  // Force default voice mode to AI on initial mount
+  useEffect(() => {
+    if (voiceService.getStatus().mode !== 'ai') {
+      voiceService.setMode('ai');
+      setVoiceStatus(voiceService.getStatus());
+    }
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -696,11 +815,23 @@ function GameBoard({ socket, gameId, isHost, tickets: initialTickets, onBackToLo
               theme={theme}
               onThemeChange={setTheme}
               gameStarted={gameStarted}
+              isHost={isHost}
+              socket={socket}
+              gameId={gameId}
+              autoDrawEnabled={autoDrawEnabled}
+              addNotification={addNotification}
+              onExit={exitGame}
             />
           )}
         </div>
       )}
 
+      {/* Global Pause Banner */}
+      {gameStarted && !autoDrawEnabled && !gameCompleted && !gameCancelled && (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-2 z-40 animate-pulse shadow-lg">
+          ⏸️ Game Paused – Take a short break!
+        </div>
+      )}
 
     </div>
   );

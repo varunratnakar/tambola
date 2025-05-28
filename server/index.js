@@ -194,8 +194,8 @@ io.on('connection', (socket) => {
     // claimType: 'line', 'corners', 'early5', or 'house'
     try {
       const result = gameManager.validateClaim(gameId, socket.id, claimType, lines, markedNumbers);
+      const game = gameManager.getGame(gameId);
       if (result.valid) {
-        const game = gameManager.getGame(gameId);
         let prizeMessage = '';
         let prizeAmount = 0;
         let lineIndex = null;
@@ -239,10 +239,56 @@ io.on('connection', (socket) => {
         gameManager.checkGameCompletion(gameId);
       } else {
         socket.emit('claim_failed', { reason: result.reason });
+
+        // Bogey feature
+        try {
+          if (game && game.options.enableBogey) {
+            io.to(gameId).emit('bogey_called', { playerName: game.players[socket.id]?.name || 'Unknown', reason: result.reason });
+          }
+        } catch (_) {}
       }
       cb(result);
     } catch (err) {
       cb({ status: 'error', message: err.message });
+    }
+  });
+
+  // Player requests pause -> forward to host
+  socket.on('request_pause', ({ gameId }, cb) => {
+    try {
+      const game = gameManager.getGame(gameId);
+      if (!game) throw new Error('Invalid game ID');
+      // Forward request to host only if host connected
+      const hostId = game.host;
+      io.to(hostId).emit('pause_requested', { playerName: game.players[socket.id]?.name || 'Unknown' });
+      cb && cb({ status: 'ok' });
+    } catch(err) {
+      cb && cb({ status: 'error', message: err.message });
+    }
+  });
+
+  // Host pauses the game
+  socket.on('pause_game', ({ gameId, seconds = 30 }, cb) => {
+    try {
+      gameManager.pauseAutoDraw(gameId, seconds);
+      cb && cb({ status: 'ok' });
+    } catch(err) {
+      cb && cb({ status: 'error', message: err.message });
+    }
+  });
+
+  socket.on('resume_game', ({ gameId }, cb) => {
+    try {
+      const game = gameManager.getGame(gameId);
+      if (!game) throw new Error('Invalid game');
+      if (socket.id !== game.host) throw new Error('Only host can resume');
+      const interval = game.autoDrawInterval || game.options?.autoDrawInterval || 15;
+      gameManager.startAutoDraw(gameId, interval);
+      game.paused = false;
+      io.to(gameId).emit('game_resumed');
+      cb && cb({ status: 'ok' });
+    } catch (err) {
+      cb && cb({ status: 'error', message: err.message });
     }
   });
 

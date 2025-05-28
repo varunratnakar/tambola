@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:4000`;
@@ -16,7 +16,8 @@ function Lobby({ onStart }) {
     enableMultipleHouses: false,
     maxHouseWinners: 3,
     houseReductionPercent: 50,
-    autoDrawInterval: 10 // Default 15 seconds
+    autoDrawInterval: 10, // Default 15 seconds
+    enableBogey: false
   });
   
   // Prize tracking
@@ -47,6 +48,64 @@ function Lobby({ onStart }) {
   const ticketsRef = useRef(null);
   const isHostRef = useRef(false);
 
+  // Auto-rejoin logic on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem('tambolaSession');
+    if (!saved) return;
+    const { gameId: savedGameId, playerName: savedName, numTickets: savedTickets, isHost: savedHost } = JSON.parse(saved);
+    if (!savedGameId || !savedName) return;
+
+    setGameCode(savedGameId);
+    setPlayerName(savedName);
+    setNumTickets(savedTickets || 1);
+
+    connect();
+
+    // After connection established, attempt join_game
+    let rejoinAttempts = 0;
+    const tryJoin = () => {
+      if (rejoinAttempts > 10) {
+        console.warn('Auto rejoin exhausted attempts');
+        sessionStorage.removeItem('tambolaSession');
+        return;
+      }
+      rejoinAttempts++;
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit('join_game', {
+          gameId: savedGameId,
+          playerName: savedName,
+          numTickets: savedTickets || 1
+        }, (res) => {
+          if (res.status === 'ok') {
+            setPlayers(res.players);
+            setTickets(res.tickets);
+            ticketsRef.current = res.tickets;
+            setIsHost(savedHost);
+            isHostRef.current = savedHost;
+            setScreen('lobby');
+          } else if (res.message && res.message.includes('already started')) {
+            // Maybe we are still registered: ask game info
+            socketRef.current.emit('get_game_info', { gameId: savedGameId }, (infoRes) => {
+              if (infoRes.status === 'ok') {
+                setScreen('lobby');
+              } else {
+                console.warn('Rejoin race – retrying in 1s');
+                setTimeout(tryJoin, 1000);
+              }
+            });
+          } else {
+            console.warn('Auto rejoin failed', res.message);
+            sessionStorage.removeItem('tambolaSession');
+          }
+        });
+      } else {
+        setTimeout(tryJoin, 200);
+      }
+    };
+
+    tryJoin();
+  }, []);
+
   const connect = () => {
     if (!socketRef.current) {
       socketRef.current = io(SERVER_URL, { 
@@ -67,6 +126,11 @@ function Lobby({ onStart }) {
 
       socketRef.current.on('players_updated', ({ players }) => {
         setPlayers(players);
+      });
+
+      socketRef.current.on('player_left', ({ playerName }) => {
+        // Show a simple alert or toast – using window.alert for simplicity in lobby
+        alert(`👋 ${playerName || 'A player'} left the game.`);
       });
 
       socketRef.current.on('prizes_updated', ({ prizes, totalRevenue: revenue }) => {
@@ -169,6 +233,8 @@ function Lobby({ onStart }) {
             setIsHost(true);
             isHostRef.current = true;
             setScreen('lobby');
+            // Persist session for auto-rejoin
+            sessionStorage.setItem('tambolaSession', JSON.stringify({ gameId: res.gameId, playerName, numTickets, isHost: true }));
           } else {
             setError(res.message);
           }
@@ -258,6 +324,8 @@ function Lobby({ onStart }) {
             setIsHost(false);
             isHostRef.current = false;
             setScreen('lobby');
+            // Persist session for auto-rejoin
+            sessionStorage.setItem('tambolaSession', JSON.stringify({ gameId: code, playerName, numTickets, isHost: false }));
           } else {
             setError(res.message);
           }
@@ -277,6 +345,26 @@ function Lobby({ onStart }) {
 
   const handleStartGame = () => {
     socketRef.current.emit('start_game', { gameId: gameCode }, () => {});
+  };
+
+  // Leave current game and return to main menu
+  const handleExitGame = () => {
+    if (socketRef.current) {
+      try {
+        socketRef.current.disconnect();
+      } catch (_) {}
+      socketRef.current = null;
+    }
+    sessionStorage.removeItem('tambolaSession');
+    // Reset lobby state
+    setScreen('main');
+    setGameCode('');
+    setPlayers([]);
+    setTickets(null);
+    setIsHost(false);
+    setGameDetails(null);
+    setCurrentPrizes({ topLine:0, middleLine:0, bottomLine:0, corners:0, house:0, early5:0 });
+    setTotalRevenue(0);
   };
 
   // Main screen - only 2 buttons
@@ -434,6 +522,16 @@ function Lobby({ onStart }) {
                   <option value={20}>20 seconds</option>
                   <option value={30}>30 seconds (Slow)</option>
                 </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>Enable Bogey (false claim penalty):</span>
+                <input
+                  type="checkbox"
+                  className="w-5 h-5"
+                  checked={gameOptions.enableBogey}
+                  onChange={(e) => setGameOptions({...gameOptions, enableBogey: e.target.checked})}
+                />
               </div>
             </div>
           </div>
@@ -794,6 +892,14 @@ function Lobby({ onStart }) {
             🚀 Start Game
           </button>
         )}
+
+        {/* Exit Game button for everyone */}
+        <button
+          className="btn-danger w-full mt-2"
+          onClick={handleExitGame}
+        >
+          🏃 Exit Game
+        </button>
 
         {/* Share code */}
         <div className="mt-6 pt-4 border-t border-gray-300 text-center">

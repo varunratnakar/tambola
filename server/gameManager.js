@@ -55,6 +55,7 @@ class GameManager {
         maxHouseWinners: gameOptions.maxHouseWinners || 3,
         houseReductionPercent: gameOptions.houseReductionPercent || 50, // Each subsequent house gets 50% of previous
         autoDrawInterval: gameOptions.autoDrawInterval || 15, // Default 15 seconds
+        enableBogey: gameOptions.enableBogey || false,
       },
       // Auto-draw settings
       autoDrawEnabled: false,
@@ -107,6 +108,12 @@ class GameManager {
         if (oldSocketId === game.host) {
           game.host = socketId;
           delete game.hostDisconnectedAt;
+        }
+        
+        // If game is running and auto-draw is stopped, resume it
+        if (game.started && !game.autoDrawEnabled && !game.autoDrawTimer && game.remainingNumbers.length > 0) {
+          const interval = game.autoDrawInterval || game.options?.autoDrawInterval || 15;
+          this.startAutoDraw(gameId, interval);
         }
         
         // Return existing tickets and players (no need to recalculate prizes for reconnection)
@@ -539,7 +546,8 @@ class GameManager {
     }
     
     this.playerGameMap.delete(socketId);
-    this.io.to(gameId).emit('player_left', { playerId: socketId });
+    const playerName = game.players[socketId]?.name || 'Unknown';
+    this.io.to(gameId).emit('player_left', { playerId: socketId, playerName });
 
     // Check if game should end due to no remaining players
     if (game.started) {
