@@ -1,19 +1,10 @@
 const { generateTicket, generateTickets } = require('./ticket');
 
 class GameManager {
-  constructor(io, redisClient = null) {
+  constructor(io) {
     this.io = io;
     this.games = new Map(); // gameId -> game object
     this.playerGameMap = new Map(); // socketId -> gameId
-    this.redisClient = redisClient; // Used for cross-instance sync
-
-    // Helper to publish sync messages to Redis
-    this.publishSync = (action, payload) => {
-      if (!this.redisClient) return;
-      try {
-        this.redisClient.publish('gameSync', JSON.stringify({ action, ...payload }));
-      } catch (_) {}
-    };
   }
 
   createGame(hostSocketId, hostName, pricePerTicket = 50, numTickets = 1, gameOptions = {}) {
@@ -89,9 +80,6 @@ class GameManager {
     this.games.set(gameId, game);
     this.playerGameMap.set(hostSocketId, gameId);
     
-    // Broadcast to other instances
-    this.publishSync('create', { game });
-    
     // Return tickets and initial player list for host
     const players = [{
       name: hostName,
@@ -136,7 +124,6 @@ class GameManager {
             ticketCount: player.tickets.length,
             isHost: player.isHost || false
           }));
-        this.publishSync('update', { game });
         return { tickets: existingPlayer.tickets, players, reconnected: true, wasHost: oldSocketId === game.host };
       }
     }
@@ -166,8 +153,6 @@ class GameManager {
         ticketCount: player.tickets.length,
         isHost: player.isHost || false
       }));
-    
-    this.publishSync('update', { game });
     return { tickets, players };
   }
 
@@ -183,8 +168,6 @@ class GameManager {
       const interval = game?.options?.autoDrawInterval || 15;
       this.startAutoDraw(gameId, interval);
     }, 5000);
-
-    this.publishSync('update', { game });
   }
 
   cancelGame(gameId, socketId) {
@@ -198,9 +181,6 @@ class GameManager {
     Object.keys(game.players).forEach(playerId => {
       this.playerGameMap.delete(playerId);
     });
-
-    // Notify other instances to delete game
-    this.publishSync('delete', { gameId });
   }
 
   drawNumber(gameId, socketId = null, chosenNumber = null) {
@@ -224,7 +204,6 @@ class GameManager {
     }
     game.drawnNumbers.push(number);
     
-    this.publishSync('update', { game });
     return number;
   }
 
@@ -252,8 +231,6 @@ class GameManager {
       Object.keys(game.players).forEach(socketId => {
         this.playerGameMap.delete(socketId);
       });
-      // Inform other instances the game is over
-      this.publishSync('delete', { gameId });
     }, 5000); // 5 second delay
   }
 
@@ -287,8 +264,7 @@ class GameManager {
         const allCalled = lineNumbers.every((n) => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
         if (allCalled) {
           game.winners[lineType] = player.name;
-          this.publishSync('update', { game });
-          return { valid: true, lineType, playerName: player.name, ticketIndex };
+            return { valid: true, lineType, playerName: player.name, ticketIndex };
         }
       } else if (claimType === 'corners') {
         if (game.winners.corners) {
@@ -303,8 +279,7 @@ class GameManager {
         const allCalled = cornerNumbers.every((n) => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
         if (allCalled) {
           game.winners.corners = player.name;
-          this.publishSync('update', { game });
-          return { valid: true, playerName: player.name, ticketIndex };
+            return { valid: true, playerName: player.name, ticketIndex };
         }
       } else if (claimType === 'early5') {
         if (!game.options.enableEarly5 || game.winners.early5) {
@@ -314,7 +289,6 @@ class GameManager {
         const calledNumbers = flatTicketNumbers.filter(n => game.drawnNumbers.includes(n) && markedNumbersForTicket.includes(n));
         if (calledNumbers.length >= 5) {
           game.winners.early5 = player.name;
-          this.publishSync('update', { game });
           return { valid: true, playerName: player.name, ticketIndex };
         }
       } else if (claimType === 'house') {
@@ -347,7 +321,7 @@ class GameManager {
             position: housePosition,
             prizeAmount: prizeAmount
           });
-          this.publishSync('update', { game });
+          
           return { valid: true, playerName: player.name, ticketIndex, housePosition, prizeAmount };
         }
       }
@@ -390,8 +364,6 @@ class GameManager {
       return { valid: false, reason: 'Full House not complete on any ticket' };
     }
     
-    // After validation attempt, winners may have been updated -> sync
-    this.publishSync('update', { game });
     return { valid: false, reason: 'Invalid claim type' };
   }
 
@@ -513,8 +485,6 @@ class GameManager {
 
     // Notify players that auto-draw started
     this.io.to(gameId).emit('auto_draw_started', { interval });
-
-    this.publishSync('update', { game });
     return true;
   }
 
@@ -529,8 +499,6 @@ class GameManager {
     }
     // Emit event so clients can update UI
     this.io.to(gameId).emit('auto_draw_stopped');
-
-    this.publishSync('update', { game });
     return true;
   }
 
@@ -561,7 +529,6 @@ class GameManager {
       this.checkGameCompletion(gameId);
     }, 100); // Small delay to allow the number to be processed
 
-    this.publishSync('update', { game });
     return drawnNumber;
   }
 
@@ -582,8 +549,6 @@ class GameManager {
     const playerName = game.players[socketId]?.name || 'Unknown';
     this.io.to(gameId).emit('player_left', { playerId: socketId, playerName });
 
-    this.publishSync('update', { game });
-
     // Check if game should end due to no remaining players
     if (game.started) {
       this.checkGameCompletion(gameId);
@@ -593,7 +558,7 @@ class GameManager {
     if (socketId === game.host) {
       if (!game.started) {
         // Host left before game started - cancel immediately
-        this.games.delete(gameId);
+      this.games.delete(gameId);
         this.io.to(gameId).emit('game_cancelled', { reason: 'Host left before game started' });
         // Clean up all player mappings
         Object.keys(game.players).forEach(playerId => {
@@ -623,7 +588,6 @@ class GameManager {
           Object.keys(currentGame.players).forEach(playerId => {
             this.playerGameMap.delete(playerId);
           });
-          this.publishSync('delete', { gameId });
         }
       }
     }, 10 * 60 * 1000); // 10 minutes
@@ -691,7 +655,6 @@ class GameManager {
       }
     }, pauseSeconds * 1000);
 
-    this.publishSync('update', { game });
     return true;
   }
 }
